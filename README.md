@@ -2,6 +2,8 @@
 
 Sistema web de gestión integral para bar usando **Vue 3 + TypeScript + Supabase**.
 
+**🌐 URL de Producción:** https://paulvenci.github.io/bar-jordy/
+
 ---
 
 ## ✅ Estado Actual del Proyecto
