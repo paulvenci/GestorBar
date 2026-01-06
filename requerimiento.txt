@@ -1,0 +1,62 @@
+Secciones
+-Dashboard
+-Gestión producto
+-Gestión inventario/stock
+-Venta/POS
+-Reportes
+-Configuración
+
+
+Dashboard
+-Resumen de inventario
+-Cantidad de productos: Muestra la cantidad de productos que hay activos en el sistema
+-Cantidad de productos con Stock bajo: Muestra la cantidad de productos con Stock bajo, (stock bajo configurable)
+-Monto de dinero de ganancias de hoy: monto de dinero ganado
+-Cantidad de ventas de hoy: muestra la cantidad de ventas de hoy
+
+-Acceso rápido
+    -Nueva Venta
+    -Gestionar Productos
+    -Entrada de stock
+    -Ver Reportes
+
+Gestión producto
+Acá se gestiona el producto stock, con la siguiente información:
+    -Nombre producto (obligatorio)
+    -Categoría (bebida, jugo, con alcohol,etc) opcional
+    -Código (obligatorio)
+    -Descripción (opcional)
+    -Foto (opcional)
+    -Valor costo
+    -Valor venta
+    -Tipo producto
+        -Compuesto: El producto se compone de 2 o más productos, ejemplo: Piscola, que se compone de 500ml de cocacola y 150ml de pisco. La idea es que el valor de costo final sea proporcional al costo de cada producto stock.
+        -Simple: Es el producto que se compone de 1 producto stock, ejemplo: botella cocacola 350cc, se vende la botella como como producto. 
+
+Venta/POS
+Acá se gestionan las ventas del local:
+Sección de la izquierda debe estar los campos:
+    -Código o nombre del producto
+    -Descripción (no editable)
+    -Cantidad
+    -Valor unitario
+    -Botón agregar
+
+En la sección de la derecha:
+    -Listado de productos
+    -Botón finalizar venta
+    -Por cada item de la lista, posibilidad cambiar cantidad y de poder quitar
+
+Reportes
+Debiera mostrar reportes de ventas de la última semana, del mes, del año por cada mes.
+Mostrar ranking de ventas top 10 de productos
+Gráficos.
+
+Configuración
+    -Configurar % iva
+    -Stock minimos
+    -proponer otros parámetros necesarios y/o pertinentes
+    -Botón guardar configuración
+    -Botón cancelar configuración
+    -Botón restaurar configuración
+    
