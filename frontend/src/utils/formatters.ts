@@ -11,7 +11,8 @@ export const formatDate = (date: Date | string): string => {
     return new Intl.DateTimeFormat('es-CL', {
         year: 'numeric',
         month: '2-digit',
-        day: '2-digit'
+        day: '2-digit',
+        timeZone: 'America/Santiago' // Zona horaria de Chile (UTC-3/-4)
     }).format(new Date(date))
 }
 
@@ -21,7 +22,8 @@ export const formatDateTime = (date: Date | string): string => {
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZone: 'America/Santiago' // Zona horaria de Chile (UTC-3/-4)
     }).format(new Date(date))
 }
 

@@ -107,8 +107,16 @@ const fetchData = async () => {
 
     const { data, error } = await supabase
       .from('items_venta')
-      .select('producto_id, nombre_producto, cantidad, subtotal, created_at')
-      .gte('created_at', thirtyDaysAgo.toISOString())
+      .select(`
+        producto_id,
+        nombre_producto,
+        cantidad,
+        subtotal,
+        venta_id,
+        ventas!inner(fecha, estado)
+      `)
+      .gte('ventas.fecha', thirtyDaysAgo.toISOString())
+      .eq('ventas.estado', 'COMPLETADA')
 
     if (error) throw error
 

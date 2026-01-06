@@ -52,7 +52,7 @@
         </thead>
         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
           <tr v-for="row in summaryData" :key="row.fecha" class="hover:bg-gray-50 dark:hover:bg-gray-700">
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">{{ formatDate(row.fecha) }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">{{ row.fecha.split('-').reverse().join('-') }}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500 dark:text-gray-400">{{ row.count }}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-white">{{ formatCurrency(row.total) }}</td>
           </tr>
@@ -164,8 +164,24 @@ const fetchData = async (startDate: Date, endDate: Date) => {
         const rawData = ventasData || []
 
         rawData.forEach(venta => {
-            // Extraer fecha corta YYYY-MM-DD
-            const fechaCorta = venta.fecha.split('T')[0]
+            if (!venta.fecha) return // Skip if no date
+            
+            // Extraer solo la parte de la fecha (YYYY-MM-DD) directamente del string
+            // Sin convertir a Date para evitar problemas de timezone
+            let fechaCorta: string
+            
+            if (typeof venta.fecha === 'string') {
+                // Si viene como string "2026-01-06T20:30:06.700111+00" o similar
+                fechaCorta = venta.fecha.split('T')[0] as string
+            } else {
+                // Si viene como Date object
+                const fechaObj = new Date(venta.fecha)
+                const year = fechaObj.getFullYear()
+                const month = String(fechaObj.getMonth() + 1).padStart(2, '0')
+                const day = String(fechaObj.getDate()).padStart(2, '0')
+                fechaCorta = `${year}-${month}-${day}`
+            }
+            
             const currentTotal = dailyMap.get(fechaCorta) || 0
             dailyMap.set(fechaCorta, currentTotal + (Number(venta.total) || 0))
         })
@@ -174,7 +190,7 @@ const fetchData = async (startDate: Date, endDate: Date) => {
         const processedData = Array.from(dailyMap.entries())
             .map(([fecha, total]) => ({
                 fecha,
-                count: rawData.filter(v => v.fecha.startsWith(fecha)).length, // Contar txs del día
+                count: rawData.filter(v => v.fecha && v.fecha.startsWith(fecha)).length, // Contar txs del día
                 total
             }))
             .sort((a, b) => a.fecha.localeCompare(b.fecha))

@@ -76,8 +76,12 @@ const fetchData = async () => {
 
     const { data: soldItems, error: soldError } = await supabase
       .from('items_venta')
-      .select('producto_id')
-      .gte('created_at', dateLimit.toISOString())
+      .select(`
+        producto_id,
+        ventas!inner(fecha, estado)
+      `)
+      .gte('ventas.fecha', dateLimit.toISOString())
+      .eq('ventas.estado', 'COMPLETADA')
 
     if (soldError) throw soldError
 
