@@ -1,5 +1,13 @@
 <template>
   <AppLayout>
+    <!-- Barcode Scanner Component (invisible) -->
+    <BarcodeScanner
+      :active="barcodeModeActive"
+      :products="productos"
+      @product-found="handleProductScanned"
+      @product-not-found="handleBarcodeError"
+    />
+
     <div class="h-[calc(100vh-6rem)] flex flex-col md:flex-row gap-4 max-w-7xl mx-auto overflow-hidden">
       <!-- Left Panel: Products -->
       <div class="flex-1 min-w-0 h-1/2 md:h-full overflow-auto">
@@ -80,9 +88,13 @@ import ProductGrid from '@/components/modules/pos/ProductGrid.vue'
 import CartSummary from '@/components/modules/pos/CartSummary.vue'
 import PaymentModal from '@/components/modules/pos/PaymentModal.vue'
 import ReceiptModal from '@/components/modules/pos/ReceiptModal.vue'
+import BarcodeScanner from '@/components/modules/pos/BarcodeScanner.vue'
 
 import { useProductosStore } from '@/stores/productos'
 import { usePOSStore } from '@/stores/pos'
+import { useToast } from '@/composables/useToast'
+import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
+import type { Producto } from '@/types/database.types'
 // import type { Venta } from '@/types/database.types'
 
 const productosStore = useProductosStore()
@@ -91,17 +103,32 @@ const router = useRouter()
 
 const { productos, categorias, loading: loadingProducts } = storeToRefs(productosStore)
 const { cart, cartTotals } = storeToRefs(posStore)
+const toast = useToast()
 
 const showPaymentModal = ref(false)
 const processingSale = ref(false)
 
-const showReceiptModal = ref(false)
+const showReceiptModal = ref<any>(null)
 const lastTransaction = ref<any>(null)
+
+// Barcode Scanner State (shared composable)
+const { isActive: barcodeModeActive } = useBarcodeScanner()
 
 onMounted(() => {
   productosStore.fetchProductos()
   productosStore.fetchCategorias()
 })
+
+// Handle Product Scanned
+const handleProductScanned = (product: Producto) => {
+  posStore.addToCart(product)
+  toast.success(`✅ ${product.nombre} agregado`, 2000)
+}
+
+// Handle Barcode Error
+const handleBarcodeError = (code: string) => {
+  toast.error(`❌ Código no encontrado: ${code}`, 3000)
+}
 
 const openCheckout = () => {
   showPaymentModal.value = true
