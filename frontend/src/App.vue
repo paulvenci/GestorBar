@@ -4,6 +4,7 @@ import { useConfiguracionStore } from './stores/configuracion'
 import { useOfflineStore } from './stores/offline'
 import { useAuthStore } from './stores/auth'
 import { onMounted } from 'vue'
+import ToastContainer from './components/common/ToastContainer.vue'
 
 const configStore = useConfiguracionStore()
 const offlineStore = useOfflineStore()
@@ -21,4 +22,5 @@ onMounted(async () => {
 
 <template>
   <RouterView />
+  <ToastContainer />
 </template>
