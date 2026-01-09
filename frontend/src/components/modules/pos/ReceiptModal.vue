@@ -11,10 +11,11 @@
         <div class="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle w-full max-w-[380px]">
           
           <!-- Receipt Preview (Visual for user) -->
-          <div ref="receiptContent" class="p-4 bg-white text-black font-mono text-sm leading-tight border-b-2 border-gray-100">
+          <div ref="receiptContent" class="p-4 bg-white text-black font-mono leading-tight border-b-2 border-gray-100">
               <!-- Header -->
               <div class="text-center mb-4">
-                  <h2 class="text-xl font-bold uppercase mb-1">{{ businessName }}</h2>
+                  <h2 class="text-2xl font-bold uppercase mb-2">{{ businessName }}</h2>
+                  <p class="text-lg font-bold mb-3">VENTA #{{ String(transactionData.numero || '---').padStart(6, '0') }}</p>
                   <p class="text-xs">RUT: 76.XXX.XXX-X</p>
                   <p class="text-xs">Direccion del Local 123</p>
                   <p class="text-xs mb-2">Tel: +56 9 1234 5678</p>
