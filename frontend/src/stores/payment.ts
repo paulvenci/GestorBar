@@ -110,30 +110,65 @@ export const usePaymentStore = defineStore('payment', {
 
         /**
          * Descuenta el stock de los productos vendidos
+         * IMPORTANTE: Consulta la BD directamente para evitar problemas de caché
          */
         async deductStock(ventaId: string): Promise<void> {
             const cartStore = useCartStore()
             const productosStore = useProductosStore()
 
+            console.log(`📉 deductStock: Procesando ${cartStore.cart.length} items para venta ${ventaId}`)
+
             for (const item of cartStore.cart) {
-                const productoFull = productosStore.productos.find(p => p.id === item.productoId)
-                if (!productoFull) continue
+                console.log(`  → Procesando: ${item.nombre} (ID: ${item.productoId}), cantidad: ${item.cantidad}`)
+
+                // Buscar primero en el store local
+                let productoFull: any = productosStore.productos.find(p => p.id === item.productoId)
+
+                // Si no está en el store, consultar la BD directamente
+                if (!productoFull) {
+                    console.log(`    ⚠️ Producto no encontrado en store, consultando BD...`)
+                    const { data: productoBD, error } = await supabase
+                        .from('productos')
+                        .select(`*, receta:recetas(id, componentes:componentes_receta(cantidad, unidad_medida, producto_simple:productos(id, stock_actual, contenido_total)))`)
+                        .eq('id', item.productoId)
+                        .single()
+
+                    if (error || !productoBD) {
+                        console.error(`    ❌ Producto ${item.nombre} no encontrado en BD, saltando...`)
+                        continue
+                    }
+                    productoFull = productoBD
+                    console.log(`    ✅ Producto encontrado en BD: ${productoFull.nombre}, tipo: ${productoFull.tipo_producto}`)
+                }
 
                 if (productoFull.tipo_producto === 'SIMPLE') {
                     const nuevoStock = productoFull.stock_actual - item.cantidad
-                    await supabase
+                    console.log(`    📦 SIMPLE: Stock ${productoFull.stock_actual} → ${nuevoStock}`)
+
+                    const { error: updateError } = await supabase
                         .from('productos')
                         .update({ stock_actual: nuevoStock })
                         .eq('id', item.productoId)
 
-                    await supabase.from('movimientos_stock').insert({
+                    if (updateError) {
+                        console.error(`    ❌ Error actualizando stock:`, updateError)
+                    }
+
+                    const { error: movError } = await supabase.from('movimientos_stock').insert({
                         producto_id: item.productoId,
                         tipo_movimiento: 'SALIDA',
                         cantidad: item.cantidad,
                         observaciones: `Venta POS #${ventaId}`
                     })
 
+                    if (movError) {
+                        console.error(`    ❌ Error insertando movimiento:`, movError)
+                    } else {
+                        console.log(`    ✅ Movimiento de stock registrado`)
+                    }
+
                 } else if (productoFull.tipo_producto === 'COMPUESTO' && productoFull.receta) {
+                    console.log(`    🧪 COMPUESTO: Procesando ingredientes...`)
                     const recetaData = Array.isArray(productoFull.receta) ? productoFull.receta[0] : productoFull.receta
                     if (recetaData && recetaData.componentes) {
                         for (const componente of recetaData.componentes) {
@@ -163,15 +198,20 @@ export const usePaymentStore = defineStore('payment', {
                                         cantidad: Number(unidadesADescontar.toFixed(4)),
                                         observaciones: `Venta POS #${ventaId} (Ingrediente de ${productoFull.nombre})`
                                     })
+                                    console.log(`      → Ingrediente ${ingredienteId}: -${unidadesADescontar.toFixed(4)} unidades`)
                                 }
                             }
                         }
                     }
+                } else {
+                    console.warn(`    ⚠️ Tipo de producto no manejado: ${productoFull.tipo_producto}`)
                 }
             }
 
             // Refrescar productos
+            console.log(`📉 deductStock: Refrescando productos...`)
             await productosStore.fetchProductos()
+            console.log(`📉 deductStock: Completado`)
         },
 
         /**
