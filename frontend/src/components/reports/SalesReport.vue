@@ -195,7 +195,7 @@ import {
 } from 'chart.js'
 import { Bar } from 'vue-chartjs'
 import { supabase } from '@/lib/supabase'
-import { formatCurrency, formatDate } from '@/utils/formatters'
+import { formatCurrency } from '@/utils/formatters'
 
 ChartJS.register(
   CategoryScale,
@@ -461,7 +461,7 @@ const fetchData = async (startDate: Date, endDate: Date) => {
     // Chart - formatear fechas directamente para evitar problemas de timezone
     const labels = summaryData.value.map(row => {
       // row.fecha viene como 'YYYY-MM-DD'
-      const [year, month, day] = row.fecha.split('-')
+      const [, month, day] = row.fecha.split('-')
       return `${day}-${month}` // Formato DD-MM para el gráfico
     })
     const values = summaryData.value.map(row => row.total)

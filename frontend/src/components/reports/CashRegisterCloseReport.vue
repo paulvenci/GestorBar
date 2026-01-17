@@ -193,7 +193,7 @@ const formatTime = (dateString: string) => {
 const calcularTotalTurno = (turno: any) => {
   // Si hay stats en vivo para este turno, usarlas
   if (turno.estado === 'ABIERTO' && liveStats.value[turno.id]) {
-    return liveStats.value[turno.id].total_general
+    return liveStats.value[turno.id]?.total_general || 0
   }
   return Number(turno.total_efectivo || 0) + 
          Number(turno.total_tarjeta || 0) + 
@@ -204,7 +204,7 @@ const calcularTotalTurno = (turno: any) => {
 // Obtener el valor correcto para mostrar (live o estático)
 const getTurnoValue = (turno: any, field: 'total_efectivo' | 'total_tarjeta' | 'total_transferencia' | 'total_credito' | 'cantidad_ventas') => {
   if (turno.estado === 'ABIERTO' && liveStats.value[turno.id]) {
-    return liveStats.value[turno.id][field]
+    return liveStats.value[turno.id]?.[field] || 0
   }
   return turno[field]
 }
