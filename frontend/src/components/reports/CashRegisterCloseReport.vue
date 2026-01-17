@@ -67,25 +67,31 @@
             <div class="grid grid-cols-2 gap-2 text-sm">
               <div class="flex justify-between">
                 <span class="text-gray-500 dark:text-gray-400">Efectivo:</span>
-                <span class="font-medium text-green-600 dark:text-green-400">{{ formatCurrency(turno.total_efectivo) }}</span>
+                <span class="font-medium text-green-600 dark:text-green-400">{{ formatCurrency(getTurnoValue(turno, 'total_efectivo')) }}</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-gray-500 dark:text-gray-400">Tarjeta:</span>
-                <span class="font-medium text-blue-600 dark:text-blue-400">{{ formatCurrency(turno.total_tarjeta) }}</span>
+                <span class="font-medium text-blue-600 dark:text-blue-400">{{ formatCurrency(getTurnoValue(turno, 'total_tarjeta')) }}</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-gray-500 dark:text-gray-400">Transferencia:</span>
-                <span class="font-medium text-purple-600 dark:text-purple-400">{{ formatCurrency(turno.total_transferencia) }}</span>
+                <span class="font-medium text-purple-600 dark:text-purple-400">{{ formatCurrency(getTurnoValue(turno, 'total_transferencia')) }}</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-gray-500 dark:text-gray-400">Crédito:</span>
-                <span class="font-medium text-orange-600 dark:text-orange-400">{{ formatCurrency(turno.total_credito) }}</span>
+                <span class="font-medium text-orange-600 dark:text-orange-400">{{ formatCurrency(getTurnoValue(turno, 'total_credito')) }}</span>
               </div>
             </div>
 
             <!-- Total y Ventas -->
             <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
-              <span class="text-gray-600 dark:text-gray-400">{{ turno.cantidad_ventas }} ventas</span>
+              <span class="text-gray-600 dark:text-gray-400">
+                {{ getTurnoValue(turno, 'cantidad_ventas') }} ventas
+                <span v-if="turno.estado === 'ABIERTO'" class="ml-1 inline-flex items-center">
+                  <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  <span class="ml-1 text-xs text-green-600 dark:text-green-400">EN VIVO</span>
+                </span>
+              </span>
               <span class="text-lg font-bold text-gray-900 dark:text-white">
                 {{ formatCurrency(calcularTotalTurno(turno)) }}
               </span>
@@ -159,11 +165,23 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { useCierreCajaStore } from '@/stores/cierreCaja'
 import { formatCurrency } from '@/utils/formatters'
 
 const cierreCajaStore = useCierreCajaStore()
+
+// Estado para estadísticas en vivo de turnos abiertos
+const liveStats = ref<Record<string, {
+  total_efectivo: number
+  total_tarjeta: number
+  total_transferencia: number
+  total_credito: number
+  cantidad_ventas: number
+  total_general: number
+}>>({})
+
+let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 const consolidado = computed(() => cierreCajaStore.consolidadoDia)
 
@@ -173,14 +191,35 @@ const formatTime = (dateString: string) => {
 }
 
 const calcularTotalTurno = (turno: any) => {
+  // Si hay stats en vivo para este turno, usarlas
+  if (turno.estado === 'ABIERTO' && liveStats.value[turno.id]) {
+    return liveStats.value[turno.id].total_general
+  }
   return Number(turno.total_efectivo || 0) + 
          Number(turno.total_tarjeta || 0) + 
          Number(turno.total_transferencia || 0) + 
          Number(turno.total_credito || 0)
 }
 
-const cargarDatos = () => {
-  cierreCajaStore.fetchTurnosDia()
+// Obtener el valor correcto para mostrar (live o estático)
+const getTurnoValue = (turno: any, field: 'total_efectivo' | 'total_tarjeta' | 'total_transferencia' | 'total_credito' | 'cantidad_ventas') => {
+  if (turno.estado === 'ABIERTO' && liveStats.value[turno.id]) {
+    return liveStats.value[turno.id][field]
+  }
+  return turno[field]
+}
+
+const cargarDatos = async () => {
+  await cierreCajaStore.fetchTurnosDia()
+  await cargarEstadisticasVivo()
+}
+
+const cargarEstadisticasVivo = async () => {
+  const turnosAbiertos = cierreCajaStore.turnos.filter(t => t.estado === 'ABIERTO')
+  for (const turno of turnosAbiertos) {
+    const stats = await cierreCajaStore.calcularEstadisticasTurnoVivo(turno.id)
+    liveStats.value[turno.id] = stats
+  }
 }
 
 const cargarHoy = () => {
@@ -193,7 +232,16 @@ const imprimirReporte = () => {
   window.print()
 }
 
-onMounted(() => {
-  cargarDatos()
+onMounted(async () => {
+  await cargarDatos()
+  // Actualizar estadísticas en vivo cada 30 segundos
+  refreshInterval = setInterval(cargarEstadisticasVivo, 30000)
+})
+
+onUnmounted(() => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+  }
 })
 </script>
+

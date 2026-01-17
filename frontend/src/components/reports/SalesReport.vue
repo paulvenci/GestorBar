@@ -34,7 +34,7 @@
       <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-gray-800/50 z-10">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
       </div>
-      <Line v-if="chartData.labels && chartData.labels.length > 0" :data="chartData" :options="chartOptions" />
+      <Bar v-if="chartData.labels && chartData.labels.length > 0" :data="chartData" :options="chartOptions" />
       <div v-else-if="!loading" class="h-full flex items-center justify-center text-gray-500">
         No hay datos para el período seleccionado
       </div>
@@ -143,6 +143,42 @@
         </div>
       </div>
     </div>
+
+    <!-- Individual Sales with Time (shown when a day is selected) -->
+    <div v-if="selectedDay" class="mt-6">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+          🕐 Ventas del {{ selectedDay.split('-').reverse().join('-') }}
+        </h3>
+        <span class="text-xs text-gray-500 dark:text-gray-400">
+          {{ ventasDelDia.length }} transacciones
+        </span>
+      </div>
+      <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 max-h-64 overflow-y-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead class="bg-gray-50 dark:bg-gray-700 sticky top-0">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Hora</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Productos</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            <tr v-for="(venta, index) in ventasDelDia" :key="index" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+              <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                {{ formatHora(venta.fecha) }}
+              </td>
+              <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+                {{ venta.items?.length || 0 }} items
+              </td>
+              <td class="px-4 py-2 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-white">
+                {{ formatCurrency(venta.total) }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -152,21 +188,19 @@ import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
-  PointElement,
-  LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend
 } from 'chart.js'
-import { Line } from 'vue-chartjs'
+import { Bar } from 'vue-chartjs'
 import { supabase } from '@/lib/supabase'
 import { formatCurrency, formatDate } from '@/utils/formatters'
 
 ChartJS.register(
   CategoryScale,
   LinearScale,
-  PointElement,
-  LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend
@@ -316,6 +350,20 @@ const clearDaySelection = () => {
   selectedDay.value = null
 }
 
+// Computed: ventas del día seleccionado
+const ventasDelDia = computed(() => {
+  if (!selectedDay.value) return []
+  return allVentas.value
+    .filter(v => v.fecha && v.fecha.startsWith(selectedDay.value!))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+})
+
+// Format hora from fecha
+const formatHora = (fecha: string) => {
+  const date = new Date(fecha)
+  return date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
+}
+
 const updateRange = () => {
   const today = new Date()
   const start = new Date()
@@ -334,7 +382,23 @@ const updateRange = () => {
 
 const loadData = () => {
   if (customStart.value && customEnd.value) {
-    fetchData(new Date(customStart.value), new Date(customEnd.value))
+    // Parsear fechas directamente para evitar problemas de timezone
+    // customStart y customEnd vienen como 'YYYY-MM-DD' desde input type="date"
+    const startParts = customStart.value.split('-').map(Number)
+    const endParts = customEnd.value.split('-').map(Number)
+    
+    const startYear = startParts[0] || 2026
+    const startMonth = startParts[1] || 1
+    const startDay = startParts[2] || 1
+    const endYear = endParts[0] || 2026
+    const endMonth = endParts[1] || 1
+    const endDay = endParts[2] || 1
+    
+    // Crear fechas usando la hora local (no UTC)
+    const start = new Date(startYear, startMonth - 1, startDay, 0, 0, 0)
+    const end = new Date(endYear, endMonth - 1, endDay, 23, 59, 59)
+    
+    fetchData(start, end)
   }
 }
 
@@ -394,8 +458,12 @@ const fetchData = async (startDate: Date, endDate: Date) => {
 
     totalPeriodo.value = summaryData.value.reduce((sum, row) => sum + row.total, 0)
 
-    // Chart
-    const labels = summaryData.value.map(row => formatDate(row.fecha).split(',')[0])
+    // Chart - formatear fechas directamente para evitar problemas de timezone
+    const labels = summaryData.value.map(row => {
+      // row.fecha viene como 'YYYY-MM-DD'
+      const [year, month, day] = row.fecha.split('-')
+      return `${day}-${month}` // Formato DD-MM para el gráfico
+    })
     const values = summaryData.value.map(row => row.total)
 
     chartData.value = {

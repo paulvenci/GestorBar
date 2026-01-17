@@ -24,8 +24,16 @@
 
       <!-- Tab Content Placeholder -->
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 min-h-[400px]">
-        <div v-if="currentTab === 'cierre-caja'">
+        <div v-if="currentTab === 'ventas-hoy'">
+          <VentasHoyReport />
+        </div>
+        
+        <div v-else-if="currentTab === 'cierre-caja'">
           <CashRegisterCloseReport />
+        </div>
+        
+        <div v-else-if="currentTab === 'historial'">
+          <VentasHistorialTable />
         </div>
         
         <div v-else-if="currentTab === 'sales'">
@@ -51,20 +59,26 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import VentasHoyReport from '@/components/reports/VentasHoyReport.vue'
 import CashRegisterCloseReport from '@/components/reports/CashRegisterCloseReport.vue'
+import VentasHistorialTable from '@/components/reports/VentasHistorialTable.vue'
 import SalesReport from '@/components/reports/SalesReport.vue'
 import TopProductsReport from '@/components/reports/TopProductsReport.vue'
 import MonthlyComparisonReport from '@/components/reports/MonthlyComparisonReport.vue'
 import StaleProductsReport from '@/components/reports/StaleProductsReport.vue'
 
 const tabs = [
+  { id: 'ventas-hoy', name: '📋 Ventas del Día' },
   { id: 'cierre-caja', name: '💰 Cierre de Caja' },
-  { id: 'sales', name: 'Historial de Ventas' },
+  { id: 'historial', name: '📜 Historial Detallado' },
+  { id: 'sales', name: '📊 Gráfico Ventas' },
   { id: 'top-products', name: 'Productos Top' },
   { id: 'comparison', name: 'Comparativa Mensual' },
   { id: 'stale', name: 'Sin Rotación' }
 ]
 
-const currentTab = ref('cierre-caja')
+const currentTab = ref('ventas-hoy')
 </script>
+
+
 

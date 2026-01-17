@@ -157,6 +157,71 @@ export const useCierreCajaStore = defineStore('cierreCaja', {
          */
         async cambiarFecha(fecha: string) {
             await this.fetchTurnosDia(fecha)
+        },
+
+        /**
+         * Calcula estadísticas en vivo para un turno abierto
+         * Consulta las ventas asociadas al turno directamente
+         */
+        async calcularEstadisticasTurnoVivo(turnoId: string): Promise<{
+            total_efectivo: number
+            total_tarjeta: number
+            total_transferencia: number
+            total_credito: number
+            cantidad_ventas: number
+            total_general: number
+        }> {
+            try {
+                const { data: ventas, error } = await supabase
+                    .from('ventas')
+                    .select('total, metodo_pago')
+                    .eq('turno_id', turnoId)
+                    .eq('estado', 'COMPLETADA')
+
+                if (error) throw error
+
+                const stats = {
+                    total_efectivo: 0,
+                    total_tarjeta: 0,
+                    total_transferencia: 0,
+                    total_credito: 0,
+                    cantidad_ventas: 0,
+                    total_general: 0
+                }
+
+                for (const venta of (ventas || [])) {
+                    const total = Number(venta.total) || 0
+                    stats.total_general += total
+                    stats.cantidad_ventas++
+
+                    switch (venta.metodo_pago) {
+                        case 'EFECTIVO':
+                            stats.total_efectivo += total
+                            break
+                        case 'TARJETA':
+                            stats.total_tarjeta += total
+                            break
+                        case 'TRANSFERENCIA':
+                            stats.total_transferencia += total
+                            break
+                        case 'CREDITO':
+                            stats.total_credito += total
+                            break
+                    }
+                }
+
+                return stats
+            } catch (err: any) {
+                console.error('Error calculando estadísticas en vivo:', err)
+                return {
+                    total_efectivo: 0,
+                    total_tarjeta: 0,
+                    total_transferencia: 0,
+                    total_credito: 0,
+                    cantidad_ventas: 0,
+                    total_general: 0
+                }
+            }
         }
     }
 })

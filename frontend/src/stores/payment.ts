@@ -6,17 +6,7 @@ import { useConfiguracionStore } from './configuracion'
 import { useAuthStore } from './auth'
 import { useTurnoStore } from './turno'
 
-// Helper function to get local date in ISO-like format
-function getLocalISOString(): string {
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const day = String(now.getDate()).padStart(2, '0')
-    const hours = String(now.getHours()).padStart(2, '0')
-    const minutes = String(now.getMinutes()).padStart(2, '0')
-    const seconds = String(now.getSeconds()).padStart(2, '0')
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
-}
+
 
 export type PaymentMethod = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CREDITO'
 
@@ -330,7 +320,7 @@ export const usePaymentStore = defineStore('payment', {
                     iva: finalIva,
                     total: finalTotal,
                     descuento: discountAmount,
-                    fecha: getLocalISOString(),
+                    fecha: new Date().toISOString(),
                     vendedor_id: authStore.usuario?.id || null,
                     turno_id: turnoStore.turnoActivo?.id || null
                 })
@@ -435,7 +425,7 @@ export const usePaymentStore = defineStore('payment', {
                     estado: 'COMPLETADA',
                     cliente_nombre: cliente || 'Cliente General',
                     mesa_id: cartStore.activeTableId || null,
-                    fecha: getLocalISOString()
+                    fecha: new Date().toISOString()
                 }
 
                 const itemsData = cartStore.cart.map(item => ({

@@ -15,16 +15,29 @@
             <!-- Producto -->
             <div>
               <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Producto</label>
+              <!-- Search field -->
+              <div class="relative mt-1 mb-2">
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  placeholder="🔍 Buscar producto..."
+                  class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm p-2 border"
+                />
+              </div>
               <select 
                 v-model="form.producto_id"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm p-2 border"
+                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm p-2 border"
                 required
+                size="5"
               >
-                <option value="">Seleccionar producto</option>
-                <option v-for="prod in products" :key="prod.id" :value="prod.id">
+                <option value="" disabled>Seleccionar producto</option>
+                <option v-for="prod in filteredProducts" :key="prod.id" :value="prod.id">
                   {{ prod.nombre }} (Stock: {{ prod.stock_actual }})
                 </option>
               </select>
+              <p v-if="searchQuery && filteredProducts.length === 0" class="text-sm text-gray-500 mt-1">
+                No se encontraron productos
+              </p>
             </div>
 
             <!-- Advertenica Compuesto -->
@@ -132,12 +145,23 @@ const emit = defineEmits<{
 const inventoryStore = useInventoryStore()
 const saving = ref(false)
 const error = ref<string | null>(null)
+const searchQuery = ref('')
 
 const form = ref({
   producto_id: '',
   tipo_movimiento: 'ENTRADA' as 'ENTRADA' | 'SALIDA' | 'AJUSTE',
   cantidad: 1,
   observaciones: ''
+})
+
+// Filtered products based on search
+const filteredProducts = computed(() => {
+  if (!searchQuery.value) return props.products
+  const query = searchQuery.value.toLowerCase()
+  return props.products.filter(p => 
+    p.nombre.toLowerCase().includes(query) ||
+    (p.codigo && p.codigo.toLowerCase().includes(query))
+  )
 })
 
 const selectedProduct = computed(() => 

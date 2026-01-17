@@ -3,17 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useCartStore } from './cart'
 import type { ItemCarrito } from '@/types/database.types'
 
-// Helper function to get local date in ISO-like format
-function getLocalISOString(): string {
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const day = String(now.getDate()).padStart(2, '0')
-    const hours = String(now.getHours()).padStart(2, '0')
-    const minutes = String(now.getMinutes()).padStart(2, '0')
-    const seconds = String(now.getSeconds()).padStart(2, '0')
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
-}
+
 
 export interface ClienteInfo {
     nombre: string
@@ -173,7 +163,7 @@ export const useOrderStore = defineStore('order', {
                         iva: totals.iva,
                         total: totals.total,
                         cliente_nombre: cartStore.activeClientName,
-                        fecha: getLocalISOString()
+                        fecha: new Date().toISOString()
                     }).eq('id', saleId)
                 } else {
                     // Crear nueva venta
