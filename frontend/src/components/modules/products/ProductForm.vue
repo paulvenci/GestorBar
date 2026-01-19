@@ -117,8 +117,9 @@
                   type="number" 
                   min="0"
                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm p-2 border"
-                  :disabled="form.tipo_producto === 'COMPUESTO'"
+                  :disabled="!isEditing || form.tipo_producto === 'COMPUESTO'"
                 />
+                <p v-if="!isEditing" class="text-xs text-gray-500 mt-1">El stock se gestionará desde el módulo de Inventario</p>
               </div>
 
               <!-- Stock Mínimo -->
