@@ -8,6 +8,7 @@ interface ConfigState {
     nombreNegocio: string
     logoUrl: string
     diasSinRotacion: number
+    diasAnulacionVentas: number
     ticketAncho: '80mm' | '58mm'
     ticketMensajePie: string
     loading: boolean
@@ -21,6 +22,7 @@ export const useConfiguracionStore = defineStore('configuracion', {
         nombreNegocio: 'Bar Gordy',
         logoUrl: '',
         diasSinRotacion: 30,
+        diasAnulacionVentas: 7,
         ticketAncho: '80mm',
         ticketMensajePie: '¡Gracias por su preferencia!',
         loading: false
@@ -56,6 +58,9 @@ export const useConfiguracionStore = defineStore('configuracion', {
                             break
                         case 'dias_sin_rotacion':
                             this.diasSinRotacion = Number(config.valor)
+                            break
+                        case 'dias_anulacion_ventas':
+                            this.diasAnulacionVentas = Number(config.valor)
                             break
                         case 'ticket_ancho':
                             this.ticketAncho = config.valor as '80mm' | '58mm'
@@ -103,6 +108,12 @@ export const useConfiguracionStore = defineStore('configuracion', {
                 if (updates.diasSinRotacion !== undefined) {
                     promises.push(
                         supabase.from('configuracion').update({ valor: String(updates.diasSinRotacion) }).eq('clave', 'dias_sin_rotacion')
+                    )
+                }
+
+                if (updates.diasAnulacionVentas !== undefined) {
+                    promises.push(
+                        supabase.from('configuracion').update({ valor: String(updates.diasAnulacionVentas) }).eq('clave', 'dias_anulacion_ventas')
                     )
                 }
 

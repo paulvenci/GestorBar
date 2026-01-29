@@ -151,6 +151,22 @@
               </p>
             </div>
           </div>
+          
+          <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              ⚠️ Rango de Anulación de Ventas (Días)
+            </label>
+            <input
+              v-model.number="form.diasAnulacionVentas"
+              type="number"
+              min="1"
+              max="365"
+              class="w-full rounded-md border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500"
+            />
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Número de días hacia atrás permitidos para anular una venta. Por ejemplo, si estableces 7 días, podrás anular ventas de los últimos 7 días.
+            </p>
+          </div>
         </div>
 
         <!-- Ticket Printing Settings -->
@@ -344,6 +360,7 @@ const form = reactive({
   porcentajeIVA: 19,
   stockMinimoDefault: 5,
   diasSinRotacion: 30,
+  diasAnulacionVentas: 7,
   ticketAncho: '80mm',
   ticketMensajePie: ''
 })
@@ -360,6 +377,7 @@ onMounted(async () => {
     form.porcentajeIVA = configStore.porcentajeIVA
     form.stockMinimoDefault = configStore.stockMinimoDefault
     form.diasSinRotacion = configStore.diasSinRotacion
+    form.diasAnulacionVentas = configStore.diasAnulacionVentas
     form.ticketAncho = configStore.ticketAncho
     form.ticketMensajePie = configStore.ticketMensajePie
 })
@@ -376,6 +394,7 @@ const saveSettings = async () => {
         porcentajeIVA: form.porcentajeIVA,
         stockMinimoDefault: form.stockMinimoDefault,
         diasSinRotacion: form.diasSinRotacion,
+        diasAnulacionVentas: form.diasAnulacionVentas,
         ticketAncho: form.ticketAncho as '80mm' | '58mm',
         ticketMensajePie: form.ticketMensajePie
     })

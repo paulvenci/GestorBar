@@ -1,6 +1,16 @@
 import { defineStore } from 'pinia'
 import { supabase } from '@/lib/supabase'
 
+interface VentaResumen {
+    id: string
+    numero: number
+    fecha: string
+    total: number
+    metodo_pago: string
+    turno_id: string | null
+    vendedor_id: string | null
+}
+
 interface TurnoConUsuario {
     id: string
     usuario_id: string
@@ -15,6 +25,24 @@ interface TurnoConUsuario {
     observaciones: string | null
     usuario: {
         nombre: string
+    }
+    ventas_dentro_turno?: VentaResumen[]
+    ventas_fuera_turno?: VentaResumen[]
+    totales_dentro?: {
+        efectivo: number
+        tarjeta: number
+        transferencia: number
+        credito: number
+        total: number
+        cantidad: number
+    }
+    totales_fuera?: {
+        efectivo: number
+        tarjeta: number
+        transferencia: number
+        credito: number
+        total: number
+        cantidad: number
     }
 }
 
@@ -220,6 +248,136 @@ export const useCierreCajaStore = defineStore('cierreCaja', {
                     total_credito: 0,
                     cantidad_ventas: 0,
                     total_general: 0
+                }
+            }
+        },
+
+        /**
+         * Obtiene el desglose de ventas de un turno
+         * Separa las ventas DENTRO del turno de las FUERA del turno
+         */
+        async fetchVentasDesgloseTurno(turnoId: string, usuarioId: string, horaInicio: string, horaFin: string | null) {
+            try {
+                // Determinar el rango de fechas del turno
+                const inicio = new Date(horaInicio)
+                const fin = horaFin ? new Date(horaFin) : new Date()
+
+                // Obtener todas las ventas del usuario en el período del turno
+                const { data: ventas, error } = await supabase
+                    .from('ventas')
+                    .select('id, numero, fecha, total, metodo_pago, turno_id, vendedor_id')
+                    .eq('vendedor_id', usuarioId)
+                    .eq('estado', 'COMPLETADA')
+                    .gte('fecha', inicio.toISOString())
+                    .lte('fecha', fin.toISOString())
+                    .order('fecha', { ascending: true })
+
+                if (error) throw error
+
+                // Separar ventas dentro y fuera del turno
+                const ventasDentro: VentaResumen[] = []
+                const ventasFuera: VentaResumen[] = []
+
+                const totalesDentro = {
+                    efectivo: 0,
+                    tarjeta: 0,
+                    transferencia: 0,
+                    credito: 0,
+                    total: 0,
+                    cantidad: 0
+                }
+
+                const totalesFuera = {
+                    efectivo: 0,
+                    tarjeta: 0,
+                    transferencia: 0,
+                    credito: 0,
+                    total: 0,
+                    cantidad: 0
+                }
+
+                for (const venta of (ventas || [])) {
+                    const ventaResumen: VentaResumen = {
+                        id: venta.id,
+                        numero: venta.numero,
+                        fecha: venta.fecha,
+                        total: Number(venta.total) || 0,
+                        metodo_pago: venta.metodo_pago,
+                        turno_id: venta.turno_id,
+                        vendedor_id: venta.vendedor_id
+                    }
+
+                    const total = ventaResumen.total
+
+                    // Clasificar la venta
+                    if (venta.turno_id === turnoId) {
+                        ventasDentro.push(ventaResumen)
+                        totalesDentro.total += total
+                        totalesDentro.cantidad++
+
+                        switch (venta.metodo_pago) {
+                            case 'EFECTIVO':
+                                totalesDentro.efectivo += total
+                                break
+                            case 'TARJETA':
+                                totalesDentro.tarjeta += total
+                                break
+                            case 'TRANSFERENCIA':
+                                totalesDentro.transferencia += total
+                                break
+                            case 'CREDITO':
+                                totalesDentro.credito += total
+                                break
+                        }
+                    } else {
+                        ventasFuera.push(ventaResumen)
+                        totalesFuera.total += total
+                        totalesFuera.cantidad++
+
+                        switch (venta.metodo_pago) {
+                            case 'EFECTIVO':
+                                totalesFuera.efectivo += total
+                                break
+                            case 'TARJETA':
+                                totalesFuera.tarjeta += total
+                                break
+                            case 'TRANSFERENCIA':
+                                totalesFuera.transferencia += total
+                                break
+                            case 'CREDITO':
+                                totalesFuera.credito += total
+                                break
+                        }
+                    }
+                }
+
+                return {
+                    ventas_dentro_turno: ventasDentro,
+                    ventas_fuera_turno: ventasFuera,
+                    totales_dentro: totalesDentro,
+                    totales_fuera: totalesFuera
+                }
+            } catch (err: any) {
+                console.error('Error obteniendo desglose de ventas del turno:', err)
+                return {
+                    ventas_dentro_turno: [],
+                    ventas_fuera_turno: [],
+                    totales_dentro: {
+                        efectivo: 0,
+                        tarjeta: 0,
+                        transferencia: 0,
+                        credito: 0,
+                        total: 0,
+                        cantidad: 0
+                    },
+                    totales_fuera: {
+                        efectivo: 0,
+                        tarjeta: 0,
+                        transferencia: 0,
+                        credito: 0,
+                        total: 0,
+                        cantidad: 0
+                    }
                 }
             }
         }

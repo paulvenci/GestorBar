@@ -101,6 +101,128 @@
             <p v-if="turno.observaciones" class="mt-2 text-xs text-gray-500 dark:text-gray-400 italic">
               📝 {{ turno.observaciones }}
             </p>
+
+            <!-- Botón Desglose de Ventas -->
+            <button
+              @click="toggleDesglose(turno)"
+              class="mt-3 w-full py-2 px-3 text-sm font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <svg 
+                :class="turnosExpandidos.has(turno.id) ? 'rotate-180' : ''"
+                class="w-4 h-4 transition-transform" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+              {{ turnosExpandidos.has(turno.id) ? 'Ocultar' : 'Ver' }} Desglose de Ventas
+            </button>
+
+            <!-- Desglose Expandido -->
+            <div v-if="turnosExpandidos.has(turno.id)" class="mt-3 border-t border-gray-200 dark:border-gray-700 pt-3">
+              <!-- Loading State -->
+              <div v-if="cargandoDesglose.has(turno.id)" class="flex justify-center py-4">
+                <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+              </div>
+
+              <!-- Desglose Cargado -->
+              <div v-else class="space-y-3">
+                <!-- Ventas DENTRO del Turno -->
+                <div class="bg-green-50 dark:bg-green-900/10 rounded-lg p-3">
+                  <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-sm font-semibold text-green-800 dark:text-green-300 flex items-center gap-1">
+                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                      </svg>
+                      Ventas en Turno
+                    </h4>
+                    <span class="text-sm font-bold text-green-700 dark:text-green-300">
+                      {{ formatCurrency(turno.totales_dentro?.total || 0) }}
+                    </span>
+                  </div>
+                  
+                  <div v-if="turno.ventas_dentro_turno && turno.ventas_dentro_turno.length > 0" class="space-y-1">
+                    <div 
+                      v-for="venta in turno.ventas_dentro_turno" 
+                      :key="venta.id"
+                      class="flex justify-between text-xs bg-white dark:bg-gray-800 rounded px-2 py-1"
+                    >
+                      <span class="text-gray-600 dark:text-gray-400">
+                        #{{ venta.numero }} - {{ formatDateTime(venta.fecha) }}
+                      </span>
+                      <span class="font-medium text-gray-900 dark:text-white flex items-center gap-1">
+                        {{ formatCurrency(venta.total) }}
+                        <span class="text-xs text-gray-500">{{ venta.metodo_pago }}</span>
+                      </span>
+                    </div>
+                    <div class="text-xs text-green-700 dark:text-green-300 pt-1 flex justify-between font-medium">
+                      <span>{{ turno.totales_dentro?.cantidad || 0 }} ventas</span>
+                      <span>Total: {{ formatCurrency(turno.totales_dentro?.total || 0) }}</span>
+                    </div>
+                  </div>
+                  <p v-else class="text-xs text-gray-500 dark:text-gray-400 italic">
+                    Sin ventas registradas en turno
+                  </p>
+                </div>
+
+                <!-- Ventas FUERA del Turno -->
+                <div v-if="turno.ventas_fuera_turno && turno.ventas_fuera_turno.length > 0" class="bg-amber-50 dark:bg-amber-900/10 rounded-lg p-3">
+                  <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                      </svg>
+                      Ventas Fuera de Turno
+                    </h4>
+                    <span class="text-sm font-bold text-amber-700 dark:text-amber-300">
+                      {{ formatCurrency(turno.totales_fuera?.total || 0) }}
+                    </span>
+                  </div>
+                  
+                  <div class="space-y-1">
+                    <div 
+                      v-for="venta in turno.ventas_fuera_turno" 
+                      :key="venta.id"
+                      class="flex justify-between text-xs bg-white dark:bg-gray-800 rounded px-2 py-1"
+                    >
+                      <span class="text-gray-600 dark:text-gray-400">
+                        #{{ venta.numero }} - {{ formatDateTime(venta.fecha) }}
+                      </span>
+                      <span class="font-medium text-gray-900 dark:text-white flex items-center gap-1">
+                        {{ formatCurrency(venta.total) }}
+                        <span class="text-xs text-gray-500">{{ venta.metodo_pago }}</span>
+                      </span>
+                    </div>
+                    <div class="text-xs text-amber-700 dark:text-amber-300 pt-1 flex justify-between font-medium">
+                      <span>{{ turno.totales_fuera?.cantidad || 0 }} ventas</span>
+                      <span>Total: {{ formatCurrency(turno.totales_fuera?.total || 0) }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Resumen Comparativo -->
+                <div class="bg-gray-100 dark:bg-gray-700/50 rounded-lg p-3 border-l-4 border-primary-500">
+                  <h5 class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">📊 Resumen</h5>
+                  <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span class="text-gray-500 dark:text-gray-400">En turno:</span>
+                      <span class="ml-1 font-bold text-green-600 dark:text-green-400">{{ formatCurrency(turno.totales_dentro?.total || 0) }}</span>
+                    </div>
+                    <div>
+                      <span class="text-gray-500 dark:text-gray-400">Fuera:</span>
+                      <span class="ml-1 font-bold text-amber-600 dark:text-amber-400">{{ formatCurrency(turno.totales_fuera?.total || 0) }}</span>
+                    </div>
+                    <div class="col-span-2 pt-1 border-t border-gray-300 dark:border-gray-600">
+                      <span class="text-gray-700 dark:text-gray-300 font-semibold">Total Usuario:</span>
+                      <span class="ml-1 font-bold text-gray-900 dark:text-white">
+                        {{ formatCurrency((turno.totales_dentro?.total || 0) + (turno.totales_fuera?.total || 0)) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -181,6 +303,10 @@ const liveStats = ref<Record<string, {
   total_general: number
 }>>({})
 
+// Estado para expandir desglose de ventas
+const turnosExpandidos = ref<Set<string>>(new Set())
+const cargandoDesglose = ref<Set<string>>(new Set())
+
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 const consolidado = computed(() => cierreCajaStore.consolidadoDia)
@@ -226,6 +352,42 @@ const cargarHoy = () => {
   const today = new Date().toISOString().split('T')[0]
   cierreCajaStore.fechaSeleccionada = today || new Date().toLocaleDateString('en-CA')
   cargarDatos()
+}
+
+const toggleDesglose = async (turno: any) => {
+  const turnoId = turno.id
+  
+  if (turnosExpandidos.value.has(turnoId)) {
+    // Colapsar
+    turnosExpandidos.value.delete(turnoId)
+  } else {
+    // Expandir y cargar desglose si no existe
+    turnosExpandidos.value.add(turnoId)
+    
+    if (!turno.ventas_dentro_turno) {
+      cargandoDesglose.value.add(turnoId)
+      const desglose = await cierreCajaStore.fetchVentasDesgloseTurno(
+        turno.id,
+        turno.usuario_id,
+        turno.hora_inicio,
+        turno.hora_fin
+      )
+      
+      // Actualizar el turno con el desglose
+      Object.assign(turno, desglose)
+      cargandoDesglose.value.delete(turnoId)
+    }
+  }
+}
+
+const formatDateTime = (dateString: string) => {
+  const date = new Date(dateString)
+  return date.toLocaleString('es-CL', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit'
+  })
 }
 
 const imprimirReporte = () => {

@@ -198,11 +198,27 @@ const confirmarAnulacion = async () => {
       return
     }
 
-    // 2. Verificar que la venta es del día actual
+    // 2. Obtener configuración de días permitidos para anular
+    const { data: config } = await supabase
+      .from('configuracion')
+      .select('valor')
+      .eq('clave', 'dias_anulacion_ventas')
+      .single()
+
+    const diasPermitidos = config?.valor ? parseInt(config.valor) : 1 // Default: solo día actual
+
+    // Verificar que la venta esté dentro del rango permitido
     const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0) // Normalizar a medianoche
+    
     const fechaVenta = new Date(props.venta.fecha)
-    if (fechaVenta.toDateString() !== hoy.toDateString()) {
-      error.value = 'Solo se pueden anular ventas del día actual'
+    fechaVenta.setHours(0, 0, 0, 0) // Normalizar a medianoche
+    
+    const fechaLimite = new Date(hoy)
+    fechaLimite.setDate(hoy.getDate() - diasPermitidos)
+    
+    if (fechaVenta < fechaLimite) {
+      error.value = `Solo se pueden anular ventas de los últimos ${diasPermitidos} día${diasPermitidos !== 1 ? 's' : ''}`
       procesando.value = false
       return
     }
