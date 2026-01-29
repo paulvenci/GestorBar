@@ -5,6 +5,7 @@ import { useOfflineStore } from './stores/offline'
 import { useAuthStore } from './stores/auth'
 import { onMounted, watch } from 'vue'
 import ToastContainer from './components/common/ToastContainer.vue'
+import UpdateNotification from './components/common/UpdateNotification.vue'
 
 const configStore = useConfiguracionStore()
 const offlineStore = useOfflineStore()
@@ -63,6 +64,7 @@ watch(() => configStore.logoUrl, updateFavicon)
 </script>
 
 <template>
+  <UpdateNotification />
   <RouterView />
   <ToastContainer />
 </template>
