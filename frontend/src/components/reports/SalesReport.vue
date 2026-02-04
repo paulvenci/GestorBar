@@ -375,7 +375,7 @@ const updateRange = () => {
     start.setDate(1)
     fetchData(start, today)
   } else if (rangeType.value === 'year') {
-    start.setMonth(0, 1)
+    start.setMonth(0, 1) // 1 de enero
     fetchData(start, today)
   }
 }
@@ -407,16 +407,18 @@ const fetchData = async (startDate: Date, endDate: Date) => {
   selectedDay.value = null
   
   try {
-    const formatLocalDate = (date: Date, endOfDay = false) => {
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      const time = endOfDay ? 'T23:59:59' : 'T00:00:00'
-      return `${year}-${month}-${day}${time}`
+    const formatLocalDateISO = (date: Date, endOfDay = false) => {
+      const d = new Date(date)
+      if (endOfDay) {
+        d.setHours(23, 59, 59, 999)
+      } else {
+        d.setHours(0, 0, 0, 0)
+      }
+      return d.toISOString()
     }
     
-    const startIso = formatLocalDate(startDate)
-    const endIso = formatLocalDate(endDate, true)
+    const startIso = formatLocalDateISO(startDate)
+    const endIso = formatLocalDateISO(endDate, true)
 
     const { data: ventasData, error } = await supabase
       .from('ventas')
@@ -441,9 +443,9 @@ const fetchData = async (startDate: Date, endDate: Date) => {
     for (const venta of allVentas.value) {
       if (!venta.fecha) continue
       
-      const fechaCorta = typeof venta.fecha === 'string' 
-        ? (venta.fecha.split('T')[0] as string)
-        : (new Date(venta.fecha).toLocaleDateString('en-CA') as string)
+      // Convertir a fecha local de Chile para agrupar correctly
+      const dateObj = new Date(venta.fecha)
+      const fechaCorta = dateObj.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' })
       
       const existing = dailyMap.get(fechaCorta) || { count: 0, total: 0 }
       dailyMap.set(fechaCorta, {
