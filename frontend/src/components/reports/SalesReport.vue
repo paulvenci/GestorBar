@@ -414,28 +414,55 @@ const fetchData = async (startDate: Date, endDate: Date) => {
       } else {
         d.setHours(0, 0, 0, 0)
       }
-      return d.toISOString()
+      // Log for debugging
+      const iso = d.toISOString()
+      console.log(`Buscando ventas ${endOfDay ? 'hasta' : 'desde'}: ${iso} (${d.toLocaleString()})`)
+      return iso
     }
     
     const startIso = formatLocalDateISO(startDate)
     const endIso = formatLocalDateISO(endDate, true)
 
-    const { data: ventasData, error } = await supabase
-      .from('ventas')
-      .select(`
-        fecha, 
-        total, 
-        estado,
-        items:items_venta(nombre_producto, cantidad, subtotal)
-      `)
-      .gte('fecha', startIso)
-      .lte('fecha', endIso)
-      .eq('estado', 'COMPLETADA')
-      .order('fecha', { ascending: true })
+    let allFetchedVentas: any[] = []
+    let hasMore = true
+    let page = 0
+    const pageSize = 1000
 
-    if (error) throw error
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('ventas')
+        .select(`
+          fecha, 
+          total, 
+          estado,
+          items:items_venta(nombre_producto, cantidad, subtotal)
+        `)
+        .gte('fecha', startIso)
+        .lte('fecha', endIso)
+        .eq('estado', 'COMPLETADA')
+        .order('fecha', { ascending: true })
+        .range(page * pageSize, (page + 1) * pageSize - 1)
 
-    allVentas.value = (ventasData || []) as VentaConItems[]
+      if (error) throw error
+      
+      if (data && data.length > 0) {
+        allFetchedVentas = [...allFetchedVentas, ...data]
+      }
+      
+      if (!data || data.length < pageSize) {
+        hasMore = false
+      } else {
+        page++
+      }
+    }
+
+    allVentas.value = allFetchedVentas as VentaConItems[]
+    console.log(`Total ventas recuperadas: ${allVentas.value.length}`)
+    if (allVentas.value.length > 0) {
+      console.log(`Primera venta: ${allVentas.value[0]?.fecha}`)
+      console.log(`Última venta: ${allVentas.value[allVentas.value.length - 1]?.fecha}`)
+    }
+    console.log(`Versión actual: 1.3.5 (Paginación activada)`)
 
     // Process daily summary
     const dailyMap = new Map<string, { count: number, total: number }>()
@@ -443,9 +470,14 @@ const fetchData = async (startDate: Date, endDate: Date) => {
     for (const venta of allVentas.value) {
       if (!venta.fecha) continue
       
-      // Convertir a fecha local de Chile para agrupar correctly
-      const dateObj = new Date(venta.fecha)
-      const fechaCorta = dateObj.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' })
+      // Convertir a fecha local de Chile (YYYY-MM-DD) para agrupar correctly
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        timeZone: 'America/Santiago'
+      })
+      const fechaCorta = formatter.format(new Date(venta.fecha))
       
       const existing = dailyMap.get(fechaCorta) || { count: 0, total: 0 }
       dailyMap.set(fechaCorta, {
