@@ -34,13 +34,15 @@
         </button>
 
         <!-- Turno Activo Badge -->
-        <div 
+        <button 
           v-else
-          class="hidden sm:flex items-center gap-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2 rounded-xl"
+          @click="abrirCierreTurno"
+          class="hidden sm:flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-2 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors cursor-pointer group"
+          title="Click to Close Shift"
         >
-            <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-            <span class="text-xs font-bold text-slate-600 dark:text-slate-300">TURNO ACTIVO</span>
-        </div>
+            <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse group-hover:scale-125 transition-transform"></div>
+            <span class="text-xs font-bold text-emerald-700 dark:text-emerald-300">TURNO ACTIVO</span>
+        </button>
 
         <!-- Offline Indicator -->
         <div class="flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black transition-all border"
@@ -121,13 +123,18 @@ const showTurnoModal = ref(false)
 const { isActive: barcodeScannerActive, toggle: toggleBarcodeScanner } = useBarcodeScanner()
 
 const iniciarTurno = async () => {
-    // Logic extracted from Sidebar
-    // If modal is needed for starting turno
+    try {
+        const result = await turnoStore.iniciarTurno()
+        if (!result.success) {
+            alert('Error al iniciar turno: ' + result.error)
+        }
+    } catch (e: any) {
+        alert('Error inesperado: ' + e.message)
+    }
+}
+
+const abrirCierreTurno = () => {
     showTurnoModal.value = true
-    // Note: If logic was direct 'turnoStore.iniciarTurno()', use that. 
-    // But usually we show the modal or confirmation.
-    // The previous implementation in sidebar used TurnoIndicatorModal
-    // Let's assume TurnoIndicatorModal handles the UI for starting/stopping.
 }
 
 const toggleDarkMode = () => {
