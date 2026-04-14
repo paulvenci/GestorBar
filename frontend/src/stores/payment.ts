@@ -132,8 +132,21 @@ export const usePaymentStore = defineStore('payment', {
                 }
 
                 if (productoFull.tipo_producto === 'SIMPLE') {
-                    const nuevoStock = productoFull.stock_actual - item.cantidad
-                    console.log(`    📦 SIMPLE: Stock ${productoFull.stock_actual} → ${nuevoStock}`)
+                    // SIEMPRE consultar el stock actual de la BD antes de recortar,
+                    // no confiar en el store local (puede estar desactualizado tras un ajuste).
+                    const { data: productoReal, error: stockRealErr } = await supabase
+                        .from('productos')
+                        .select('stock_actual')
+                        .eq('id', item.productoId)
+                        .single()
+
+                    if (stockRealErr || !productoReal) {
+                        console.error(`    ❌ Error obteniendo stock de BD para:`, stockRealErr)
+                        continue
+                    }
+
+                    const nuevoStock = productoReal.stock_actual - item.cantidad
+                    console.log(`    📦 SIMPLE: Stock ${productoReal.stock_actual} → ${nuevoStock}`)
 
                     const { error: updateError } = await supabase
                         .from('productos')
