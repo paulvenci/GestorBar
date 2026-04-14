@@ -30,7 +30,11 @@
       />
 
       <!-- Movement History -->
-      <InventoryList :movimientos="movimientos" :loading="loading" />
+      <InventoryList 
+        :movimientos="movimientos" 
+        :loading="loading" 
+        @fetch="(limit, tipo) => inventoryStore.fetchMovimientos(limit, tipo)"
+      />
 
       <!-- Movement Modal -->
       <StockMovementForm 

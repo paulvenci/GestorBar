@@ -17,11 +17,11 @@ export const useInventoryStore = defineStore('inventory', {
     }),
 
     actions: {
-        async fetchMovimientos(limit = 50) {
+        async fetchMovimientos(limit = 100, tipo?: string) {
             this.loading = true
             this.error = null
             try {
-                const { data, error } = await supabase
+                let query = supabase
                     .from('movimientos_stock')
                     .select(`
             *,
@@ -29,6 +29,12 @@ export const useInventoryStore = defineStore('inventory', {
           `)
                     .order('fecha', { ascending: false })
                     .limit(limit)
+
+                if (tipo && tipo !== 'ALL') {
+                    query = query.eq('tipo_movimiento', tipo)
+                }
+
+                const { data, error } = await query
 
                 if (error) throw error
                 this.movimientos = data || []

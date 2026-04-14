@@ -5,18 +5,42 @@
         <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white">
           📋 Historial de Movimientos
         </h3>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- DB Fetch Type Filter -->
+          <select
+            v-model="dbFiltroTipo"
+            @change="fetchFromDb"
+            class="text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white focus:ring-primary-500 focus:border-primary-500 px-2 py-1.5"
+          >
+            <option value="ALL">Todo Tipo</option>
+            <option value="ENTRADA">Solo Entradas</option>
+            <option value="SALIDA">Solo Salidas</option>
+            <option value="AJUSTE">Solo Ajustes</option>
+          </select>
+
+          <!-- DB Fetch Limit Filter -->
+          <select
+            v-model="dbFiltroLimit"
+            @change="fetchFromDb"
+            class="text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white focus:ring-primary-500 focus:border-primary-500 px-2 py-1.5"
+          >
+            <option :value="100">Cargar 100</option>
+            <option :value="300">Cargar 300</option>
+            <option :value="1000">Cargar 1000</option>
+            <option :value="5000">Cargar 5000</option>
+          </select>
+
           <!-- Search Input -->
           <div class="relative">
             <input
               v-model="searchQuery"
               type="text"
-              placeholder="Buscar..."
-              class="pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white focus:ring-primary-500 focus:border-primary-500 w-40"
+              placeholder="Buscar texto..."
+              class="pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white focus:ring-primary-500 focus:border-primary-500 w-32"
             />
             <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
           </div>
-          <span class="text-sm text-gray-500">{{ filteredMovimientos.length }} movimientos</span>
+          <span class="text-sm text-gray-500 ml-1">{{ filteredMovimientos.length }} items</span>
         </div>
       </div>
     </div>
@@ -153,6 +177,17 @@ const props = defineProps<{
   movimientos: MovimientoWithProduct[]
   loading: boolean
 }>()
+
+const emit = defineEmits<{
+  (e: 'fetch', limit: number, tipo: string): void
+}>()
+
+const dbFiltroTipo = ref('ALL')
+const dbFiltroLimit = ref(100)
+
+const fetchFromDb = () => {
+  emit('fetch', dbFiltroLimit.value, dbFiltroTipo.value)
+}
 
 // Search
 const searchQuery = ref('')
