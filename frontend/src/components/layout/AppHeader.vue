@@ -34,15 +34,14 @@
         </button>
 
         <!-- Turno Activo Badge -->
-        <button 
+        <div 
           v-else
-          @click="abrirCierreTurno"
-          class="hidden sm:flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-2 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors cursor-pointer group"
-          title="Click to Close Shift"
+          class="hidden sm:flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-4 py-2 rounded-xl"
+          title="Turno Activo"
         >
-            <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse group-hover:scale-125 transition-transform"></div>
+            <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
             <span class="text-xs font-bold text-emerald-700 dark:text-emerald-300">TURNO ACTIVO</span>
-        </button>
+        </div>
 
         <!-- Offline Indicator -->
         <div class="flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black transition-all border"
@@ -93,10 +92,7 @@
       </div>
     </div>
     
-    <!-- Turno Modal (Teleported) -->
-    <Teleport to="body">
-       <TurnoIndicatorModal v-if="showTurnoModal" @close="showTurnoModal = false" />
-    </Teleport>
+
   </header>
 </template>
 
@@ -108,7 +104,6 @@ import { useOfflineStore } from '@/stores/offline'
 import { useTurnoStore } from '@/stores/turno'
 import { storeToRefs } from 'pinia'
 import { useBarcodeScanner } from '@/composables/useBarcodeScanner'
-import TurnoIndicatorModal from './TurnoIndicatorModal.vue'
 
 const configStore = useConfiguracionStore()
 const uiStore = useUIStore()
@@ -117,7 +112,6 @@ const turnoStore = useTurnoStore()
 const { nombreNegocio } = storeToRefs(configStore)
 
 const isDark = ref(false)
-const showTurnoModal = ref(false)
 
 // Barcode Scanner State (shared composable)
 const { isActive: barcodeScannerActive, toggle: toggleBarcodeScanner } = useBarcodeScanner()
@@ -133,9 +127,7 @@ const iniciarTurno = async () => {
   }
 }
 
-const abrirCierreTurno = () => {
-    showTurnoModal.value = true
-}
+
 
 const toggleDarkMode = () => {
   isDark.value = !isDark.value
