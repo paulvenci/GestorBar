@@ -5,6 +5,7 @@ import type { Producto, Categoria } from '@/types/database.types'
 interface ProductosState {
     productos: Producto[]
     categorias: Categoria[]
+    topProductsIds: string[]
     loading: boolean
     error: string | null
     lastFetchTime: number
@@ -14,6 +15,7 @@ export const useProductosStore = defineStore('productos', {
     state: (): ProductosState => ({
         productos: [],
         categorias: [],
+        topProductsIds: [],
         loading: false,
         error: null,
         lastFetchTime: 0
@@ -48,6 +50,11 @@ export const useProductosStore = defineStore('productos', {
             const timeSinceLastFetch = now - this.lastFetchTime
             if (timeSinceLastFetch < 5000 && this.productos.length > 0) {
                 console.log(`⏸️ fetchProductos: Datos recientes (${Math.round(timeSinceLastFetch / 1000)}s), usando caché`)
+                if (this.topProductsIds.length === 0) {
+                    const cachedTop = localStorage.getItem('cached_top_products')
+                    if (cachedTop) this.topProductsIds = JSON.parse(cachedTop)
+                    else this.fetchTopProductos()
+                }
                 return
             }
 
@@ -90,6 +97,17 @@ export const useProductosStore = defineStore('productos', {
                 localStorage.setItem('cached_productos', JSON.stringify(this.productos))
                 console.log('💾 fetchProductos: Productos guardados en localStorage')
 
+                // Fetch top 20 products
+                try {
+                    const { data: topData, error: topError } = await supabase.rpc('get_top_productos', { limit_val: 20 })
+                    if (!topError && topData) {
+                        this.topProductsIds = topData.map((d: any) => d.producto_id)
+                        localStorage.setItem('cached_top_products', JSON.stringify(this.topProductsIds))
+                    }
+                } catch (e) {
+                    console.error('Error fetching top products:', e)
+                }
+
                 // Actualizar timestamp de última carga
                 this.lastFetchTime = Date.now()
 
@@ -97,11 +115,15 @@ export const useProductosStore = defineStore('productos', {
                 console.error('❌ Error al cargar productos:', err)
                 // Fallback to Storage
                 const cached = localStorage.getItem('cached_productos')
+                const cachedTop = localStorage.getItem('cached_top_products')
                 if (cached) {
                     console.log('📦 Usando caché local de productos')
                     this.productos = JSON.parse(cached)
                 } else {
                     this.error = 'No se pudo cargar productos y no hay copia local.'
+                }
+                if (cachedTop) {
+                    this.topProductsIds = JSON.parse(cachedTop)
                 }
             } finally {
                 this.loading = false
@@ -129,6 +151,19 @@ export const useProductosStore = defineStore('productos', {
                 if (cached) {
                     this.categorias = JSON.parse(cached)
                 }
+            }
+        },
+
+        async fetchTopProductos() {
+            try {
+                const { data, error } = await supabase.rpc('get_top_productos', { limit_val: 20 })
+                if (error) throw error
+                if (data) {
+                    this.topProductsIds = data.map((d: any) => d.producto_id)
+                    localStorage.setItem('cached_top_products', JSON.stringify(this.topProductsIds))
+                }
+            } catch (err) {
+                console.error('Error fetching top products:', err)
             }
         },
 

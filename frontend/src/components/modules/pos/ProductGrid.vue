@@ -118,6 +118,9 @@
 import { ref, computed } from 'vue'
 import type { Producto, Categoria } from '@/types/database.types'
 import { calculateProductStock } from '@/utils/inventory'
+import { useProductosStore } from '@/stores/productos'
+
+const productosStore = useProductosStore()
 
 const props = defineProps<{
   products: Producto[]
@@ -133,17 +136,33 @@ const searchQuery = ref('')
 const selectedCategory = ref('')
 
 const filteredProducts = computed(() => {
-  return props.products.filter(p => {
-    // Filter by Search
-    const searchMatch = !searchQuery.value || 
+  // Filtrar por búsqueda
+  if (searchQuery.value) {
+    return props.products.filter(p => 
       p.nombre.toLowerCase().includes(searchQuery.value.toLowerCase()) || 
       p.codigo.toLowerCase().includes(searchQuery.value.toLowerCase())
-    
-    // Filter by Category
-    const categoryMatch = !selectedCategory.value || p.categoria_id === selectedCategory.value
+    )
+  }
+  
+  // Filtrar por categoría
+  if (selectedCategory.value) {
+    return props.products.filter(p => p.categoria_id === selectedCategory.value)
+  }
 
-    return searchMatch && categoryMatch
-  })
+  // Si no hay filtros, mostrar TOP 20 más vendidos
+  if (productosStore.topProductsIds && productosStore.topProductsIds.length > 0) {
+    const topProducts = productosStore.topProductsIds
+      .map(id => props.products.find(p => p.id === id))
+      .filter(p => p !== undefined) as Producto[]
+    
+    // Si por alguna razón la lista top está vacía después del filtro, devolver los primeros 20
+    if (topProducts.length > 0) {
+      return topProducts
+    }
+  }
+
+  // Fallback: Si no hay Top 20 calculado aún, mostrar los primeros 20 del catálogo
+  return props.products.slice(0, 20)
 })
 
 const formatNumber = (num: number) => {
