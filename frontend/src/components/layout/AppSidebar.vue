@@ -36,7 +36,7 @@
       <nav class="flex-1 px-3 py-2 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
         <!-- Main Navigation -->
         <ul class="space-y-1">
-          <li v-for="item in mainMenuItems" :key="item.path">
+          <li v-for="item in visibleMainMenuItems" :key="item.path">
             <router-link
               :to="item.path"
               @click="handleNavClick(item)"
@@ -72,7 +72,7 @@
 
         <!-- Bottom Navigation (Settings, etc) -->
         <ul class="space-y-1">
-          <li v-for="item in bottomMenuItems" :key="item.path">
+          <li v-for="item in visibleBottomMenuItems" :key="item.path">
             <router-link
               :to="item.path"
               class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 group relative"
@@ -145,19 +145,35 @@ const appVersion = ref(packageJson.version)
 
 // Flattened structure for the "Clean List" look
 const mainMenuItems = [
-  { path: '/', label: 'Inicio', icon: '🏠' },
-  { path: '/pos', label: 'Caja', icon: '💰' },
-  { path: '/mesas', label: 'Salón', icon: '🍷' },
-  { path: '/productos', label: 'Catálogo', icon: '🛍️' },
-  { path: '/inventario', label: 'Stock', icon: '📦' },
-  { path: '/reportes', label: 'Reportes', icon: '📊' },
-  { path: '/cierre-caja', label: 'Cierre', icon: '🔒' },
+  { path: '/', label: 'Inicio', icon: '🏠', permission: 'dashboard.ver' },
+  { path: '/pos', label: 'Caja', icon: '💰', permission: 'pos.acceder' },
+  { path: '/mesas', label: 'Salón', icon: '🍷', permission: 'mesas.ver' },
+  { path: '/productos', label: 'Catálogo', icon: '🛍️', permission: 'productos.ver' },
+  { path: '/inventario', label: 'Stock', icon: '📦', permission: 'inventario.ver' },
+  { path: '/reportes', label: 'Reportes', icon: '📊', permission: 'reportes.ver' },
+  { path: '/cierre-caja', label: 'Cierre', icon: '🔒', permission: 'cierre.ver' },
 ]
 
 const bottomMenuItems = [
-  { path: '/configuracion', label: 'Ajustes', icon: '⚙️' },
+  { path: '/configuracion', label: 'Ajustes', icon: '⚙️', permission: 'config.ver' },
   { path: '/ayuda', label: 'Ayuda', icon: '❓' } // Optional
 ]
+
+import { computed } from 'vue'
+
+const visibleMainMenuItems = computed(() => {
+  return mainMenuItems.filter(item => {
+    if (!item.permission) return true
+    return authStore.hasPermission(item.permission as any)
+  })
+})
+
+const visibleBottomMenuItems = computed(() => {
+  return bottomMenuItems.filter(item => {
+    if (!item.permission) return true
+    return authStore.hasPermission(item.permission as any)
+  })
+})
 
 const isActive = (item: any) => {
   if (item.path === '/') return route.path === '/'

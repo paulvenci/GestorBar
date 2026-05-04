@@ -51,6 +51,8 @@ export interface SesionUsuario {
 
 // Códigos de permisos (para autocompletado y type-safety)
 export type CodigoPermiso =
+  // Dashboard
+  | 'dashboard.ver'
   // POS
   | 'pos.acceder'
   | 'pos.vender'
@@ -78,6 +80,7 @@ export type CodigoPermiso =
   | 'reportes.ventas'
   | 'reportes.inventario'
   | 'reportes.exportar'
+  | 'cierre.ver'
   // Configuración
   | 'config.ver'
   | 'config.negocio'
@@ -91,6 +94,7 @@ export type CodigoPermiso =
 
 // Módulos del sistema
 export type Modulo = 
+  | 'dashboard'
   | 'pos'
   | 'productos'
   | 'inventario'

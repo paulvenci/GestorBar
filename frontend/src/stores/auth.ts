@@ -65,11 +65,13 @@ export const useAuthStore = defineStore('auth', {
     },
 
     // Verificar acceso a módulos
+    canAccessDashboard: (state) => state.permisos.some(p => p.codigo === 'dashboard.ver'),
     canAccessPOS: (state) => state.permisos.some(p => p.codigo === 'pos.acceder'),
     canAccessProducts: (state) => state.permisos.some(p => p.codigo === 'productos.ver'),
     canAccessInventory: (state) => state.permisos.some(p => p.codigo === 'inventario.ver'),
     canAccessTables: (state) => state.permisos.some(p => p.codigo === 'mesas.ver'),
     canAccessReports: (state) => state.permisos.some(p => p.codigo === 'reportes.ver'),
+    canAccessCierre: (state) => state.permisos.some(p => p.codigo === 'cierre.ver'),
     canAccessConfig: (state) => state.permisos.some(p => p.codigo === 'config.ver'),
     canAccessUsers: (state) => state.permisos.some(p => p.codigo === 'usuarios.ver'),
 

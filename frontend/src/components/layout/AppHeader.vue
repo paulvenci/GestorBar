@@ -123,14 +123,14 @@ const showTurnoModal = ref(false)
 const { isActive: barcodeScannerActive, toggle: toggleBarcodeScanner } = useBarcodeScanner()
 
 const iniciarTurno = async () => {
-    try {
-        const result = await turnoStore.iniciarTurno()
-        if (!result.success) {
-            alert('Error al iniciar turno: ' + result.error)
-        }
-    } catch (e: any) {
-        alert('Error inesperado: ' + e.message)
+  const result = await turnoStore.verificarYAutoIniciarTurno()
+  if (!result.success) {
+    if (result.requiresAuth) {
+      alert(result.error)
+    } else {
+      alert(result.error || 'Error al iniciar turno')
     }
+  }
 }
 
 const abrirCierreTurno = () => {

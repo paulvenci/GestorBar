@@ -89,21 +89,73 @@ export const useTurnoStore = defineStore('turno', {
         },
 
         /**
-         * Inicia un nuevo turno para el usuario actual
+         * Verifica el estado de turnos del día y auto-inicia si corresponde
          */
-        async iniciarTurno(): Promise<{ success: boolean, error?: string }> {
+        async verificarYAutoIniciarTurno(adminPin?: string): Promise<{ success: boolean, error?: string, requiresAuth?: boolean }> {
             const authStore = useAuthStore()
             if (!authStore.usuario?.id) {
                 return { success: false, error: 'Usuario no autenticado' }
             }
 
-            // Verificar si ya tiene turno abierto
-            if (this.turnoActivo) {
-                return { success: false, error: 'Ya tienes un turno abierto' }
+            // Calcular rango del día operativo actual
+            const now = new Date()
+            if (now.getHours() < 6) {
+                now.setDate(now.getDate() - 1)
             }
+            const year = now.getFullYear()
+            const month = now.getMonth()
+            const day = now.getDate()
+            const inicioDiaOperativo = new Date(year, month, day, 6, 0, 0).toISOString()
+            const finDiaOperativo = new Date(year, month, day + 1, 6, 0, 0).toISOString()
 
             this.loading = true
             try {
+                // Si el usuario proporcionó un PIN de autorización, validarlo
+                if (adminPin) {
+                    const { data: adminUser, error: adminErr } = await supabase
+                        .from('usuarios')
+                        .select('*, rol:roles(*)')
+                        .eq('pin', adminPin)
+                        .eq('activo', true)
+                        .single()
+                    
+                    if (adminErr || !adminUser) {
+                        return { success: false, error: 'PIN de autorización incorrecto' }
+                    }
+                    
+                    // Verificar si es admin/gerente (suponemos que sí si el código pasa, o verificamos el rol)
+                    const tienePermisoAdmin = adminUser.rol?.nombre === 'Administrador' || adminUser.rol?.nombre === 'Gerente'
+                    if (!tienePermisoAdmin) {
+                        return { success: false, error: 'El usuario no tiene permisos de autorización' }
+                    }
+                } else {
+                    // Verificar si hay turnos cerrados HOY (día operativo)
+                    const { data: turnosCerradosHoy, error: turnosErr } = await supabase
+                        .from('turnos_mesero')
+                        .select('id')
+                        .eq('usuario_id', authStore.usuario.id)
+                        .eq('estado', 'CERRADO')
+                        .gte('hora_inicio', inicioDiaOperativo)
+                        .lt('hora_inicio', finDiaOperativo)
+
+                    if (turnosErr) throw turnosErr
+
+                    if (turnosCerradosHoy && turnosCerradosHoy.length > 0) {
+                        // Ya cerró caja hoy
+                        return { success: false, requiresAuth: true, error: 'Caja ya cerrada por hoy. Requiere autorización.' }
+                    }
+                }
+
+                // Verificar si ya tiene turno abierto
+                if (!this.turnoActivo) {
+                    await this.fetchTurnoActivo()
+                }
+
+                if (this.turnoActivo) {
+                    return { success: true } // Ya está abierto
+                }
+
+                // Iniciar nuevo turno
                 const { data, error } = await supabase
                     .from('turnos_mesero')
                     .insert({

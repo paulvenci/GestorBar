@@ -134,6 +134,36 @@
       <div class="mt-6 text-center text-sm text-gray-500">
         <p>Sistema de Punto de Venta v{{ appVersion }}</p>
       </div>
+      <!-- Modal Autorización (Capa superpuesta al div interior) -->
+      <div v-if="requiresAuth" class="absolute inset-0 bg-white/95 z-10 flex flex-col items-center justify-center rounded-2xl p-8 text-center backdrop-blur-sm">
+        <div class="bg-red-100 text-red-600 rounded-full p-4 mb-4">
+          <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">Caja Cerrada</h2>
+        <p class="text-gray-600 mb-6">El turno de este usuario ya fue cerrado hoy. Ingrese PIN de Administrador para autorizar la reapertura.</p>
+        
+        <input
+          v-model="adminPin"
+          type="password"
+          class="w-full px-4 py-3 text-center tracking-widest text-2xl border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 mb-4"
+          placeholder="••••"
+          maxlength="6"
+        />
+
+        <div class="flex gap-3 w-full">
+          <button @click="cancelAuthorize" class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors">
+            Cancelar
+          </button>
+          <button @click="handleAuthorize" :disabled="loading" class="flex-1 px-4 py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors disabled:opacity-50">
+            {{ loading ? '...' : 'Autorizar' }}
+          </button>
+        </div>
+        
+        <p v-if="error" class="text-red-500 mt-4 text-sm">{{ error }}</p>
+      </div>
+
     </div>
   </div>
 </template>
@@ -143,11 +173,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useConfiguracionStore } from '@/stores/configuracion'
+import { useTurnoStore } from '@/stores/turno'
 import packageJson from '../../package.json'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const configStore = useConfiguracionStore()
+const turnoStore = useTurnoStore()
 
 const appVersion = packageJson.version
 
@@ -155,6 +187,10 @@ const appVersion = packageJson.version
 const loginMode = ref<'email' | 'pin'>('email')
 const loading = ref(false)
 const error = ref('')
+
+// Autorización
+const requiresAuth = ref(false)
+const adminPin = ref('')
 
 // Login con Email
 const email = ref('')
@@ -178,11 +214,25 @@ async function handleEmailLogin() {
 
   const result = await authStore.login(email.value, password.value)
 
-  loading.value = false
-
   if (result.success) {
-    router.push('/')
+    // Iniciar/Verificar Turno Automático
+    const turnoRes = await turnoStore.verificarYAutoIniciarTurno()
+    loading.value = false
+
+    if (turnoRes.requiresAuth) {
+      requiresAuth.value = true
+      error.value = 'Turno ya fue cerrado hoy. Se requiere autorización para reabrir.'
+      return
+    }
+
+    if (turnoRes.success) {
+      router.push(getDefaultRoute())
+    } else {
+      error.value = turnoRes.error || 'Error al iniciar el turno'
+      await authStore.logout() // Desloguear si no se pudo iniciar turno
+    }
   } else {
+    loading.value = false
     error.value = result.error || 'Error al iniciar sesión'
   }
 }
@@ -246,14 +296,68 @@ async function handlePinLogin() {
 
   const result = await authStore.loginWithPIN(pin.value)
 
-  loading.value = false
-
   if (result.success) {
-    router.push('/')
+    // Iniciar/Verificar Turno Automático
+    const turnoRes = await turnoStore.verificarYAutoIniciarTurno()
+    loading.value = false
+
+    if (turnoRes.requiresAuth) {
+      requiresAuth.value = true
+      error.value = 'Turno ya fue cerrado hoy. Se requiere autorización para reabrir.'
+      return
+    }
+
+    if (turnoRes.success) {
+      router.push(getDefaultRoute())
+    } else {
+      error.value = turnoRes.error || 'Error al iniciar el turno'
+      await authStore.logout() // Desloguear si no se pudo iniciar turno
+      clearPin()
+    }
   } else {
+    loading.value = false
     error.value = result.error || 'PIN incorrecto'
     clearPin()
   }
+}
+
+async function handleAuthorize() {
+  if (!adminPin.value) {
+    error.value = 'Por favor ingresa un PIN de autorización'
+    return
+  }
+
+  loading.value = true
+  error.value = ''
+
+  const result = await turnoStore.verificarYAutoIniciarTurno(adminPin.value)
+
+  loading.value = false
+
+  if (result.success) {
+    requiresAuth.value = false
+    router.push(getDefaultRoute())
+  } else {
+    error.value = result.error || 'PIN incorrecto o sin permisos'
+  }
+}
+
+async function cancelAuthorize() {
+  requiresAuth.value = false
+  adminPin.value = ''
+  error.value = ''
+  await authStore.logout()
+}
+
+// Determinar la ruta por defecto según permisos
+function getDefaultRoute() {
+  if (authStore.canAccessDashboard) return '/'
+  if (authStore.canAccessPOS) return '/pos'
+  if (authStore.canAccessTables) return '/mesas'
+  if (authStore.canAccessProducts) return '/productos'
+  if (authStore.canAccessInventory) return '/inventario'
+  if (authStore.canAccessReports) return '/reportes'
+  return '/' // fallback
 }
 
 // Focus inicial en el primer input de PIN

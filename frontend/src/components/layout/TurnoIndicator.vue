@@ -146,9 +146,13 @@ watch(showCloseModal, async (isOpen) => {
 })
 
 const iniciarTurno = async () => {
-  const result = await turnoStore.iniciarTurno()
+  const result = await turnoStore.verificarYAutoIniciarTurno()
   if (!result.success) {
-    alert('Error al iniciar turno: ' + result.error)
+    if (result.requiresAuth) {
+      alert(result.error)
+    } else {
+      alert(result.error || 'Error al iniciar turno')
+    }
   }
 }
 

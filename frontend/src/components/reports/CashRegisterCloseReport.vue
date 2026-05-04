@@ -142,8 +142,9 @@
             </span>
           </div>
 
-          <!-- Tarjetas de totales -->
-          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+          <!-- Tarjetas de totales (Solo Admin/Gerente) -->
+          <template v-if="esAdminOGerente">
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
             <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center">
               <p class="text-xs font-medium text-green-600 dark:text-green-400 uppercase">Efectivo</p>
               <p class="text-xl font-bold text-green-700 dark:text-green-300 mt-1">{{ formatCurrency(miCierre.total_efectivo) }}</p>
@@ -179,9 +180,36 @@
           </button>
 
           <!-- Desglose expandido -->
-          <div v-if="desglosePersonalAbierto" class="mt-4">
-            <DesgloseVentas :cajero="miCierre" :cargando="cargandoDesglosePersonal" />
-          </div>
+            <div v-if="desglosePersonalAbierto" class="mt-4">
+              <DesgloseVentas :cajero="miCierre" :cargando="cargandoDesglosePersonal" />
+            </div>
+          </template>
+
+          <!-- Caja Ciega (Para Meseros/Cajeros) -->
+          <template v-else>
+            <div class="bg-gray-100 dark:bg-gray-800 p-8 rounded-lg text-center border border-gray-200 dark:border-gray-700 mb-6">
+              <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 mb-4">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
+                </svg>
+              </div>
+              <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Modo Caja Ciega</h3>
+              <p class="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">Tus totales de venta están ocultos por seguridad. Para finalizar tu jornada, imprime tu comprobante y cierra tu turno.</p>
+              
+              <button 
+                @click="cerrarCajaYSalir" 
+                :disabled="cerrando" 
+                class="w-full sm:w-auto px-8 py-4 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-lg transition-colors text-lg shadow-lg flex items-center justify-center gap-2 mx-auto disabled:opacity-50"
+              >
+                <svg v-if="cerrando" class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span v-else>🔒</span>
+                {{ cerrando ? 'Cerrando turno...' : 'Cerrar Turno e Imprimir' }}
+              </button>
+            </div>
+          </template>
         </div>
         <EmptyState v-else />
       </template>
@@ -197,16 +225,21 @@ import { useConfiguracionStore } from '@/stores/configuracion'
 import { formatCurrency } from '@/utils/formatters'
 import DesgloseVentas from './DesgloseVentas.vue'
 import EmptyState from './CierreEmptyState.vue'
+import { useTurnoStore } from '@/stores/turno'
+import { useRouter } from 'vue-router'
 
 const cierreCajaStore = useCierreCajaStore()
 const authStore = useAuthStore()
 const configStore = useConfiguracionStore()
+const turnoStore = useTurnoStore()
+const router = useRouter()
 
 // Estado local
 const expandidos = ref<Set<string>>(new Set())
 const cargandoDesglose = ref<Set<string>>(new Set())
 const desglosePersonalAbierto = ref(false)
 const cargandoDesglosePersonal = ref(false)
+const cerrando = ref(false)
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
@@ -336,6 +369,39 @@ const imprimirReporte = () => {
 </head><body><pre>${lines.join('\n')}</pre>
 <script>window.onload=function(){window.print();setTimeout(function(){window.close()},500)};<\/script></body></html>`)
   pw.document.close()
+}
+
+const cerrarCajaYSalir = async () => {
+  if (cerrando.value) return
+  
+  const confirmar = confirm('¿Estás seguro de que deseas cerrar tu turno? Se imprimirá tu comprobante y se cerrará tu sesión.')
+  if (!confirmar) return
+
+  cerrando.value = true
+  
+  try {
+    // 1. Cerrar Turno
+    const result = await turnoStore.cerrarTurno('Cierre de caja ciega')
+    if (!result.success) {
+      alert(result.error || 'Error al cerrar el turno')
+      cerrando.value = false
+      return
+    }
+
+    // 2. Imprimir (ya tenemos los datos cargados en miCierre)
+    imprimirReporte()
+
+    // 3. Esperar un poco para que el print dialogue no se interrumpa
+    await new Promise(resolve => setTimeout(resolve, 1500))
+
+    // 4. Logout y volver a login
+    await authStore.logout()
+    router.push('/login')
+  } catch (error) {
+    console.error('Error en cierre de caja:', error)
+    alert('Ocurrió un error inesperado')
+    cerrando.value = false
+  }
 }
 
 onMounted(async () => {

@@ -38,7 +38,8 @@ const router = createRouter({
             component: Dashboard,
             meta: {
                 title: 'Dashboard',
-                requiresAuth: true
+                requiresAuth: true,
+                requiresPermission: 'dashboard.ver'
             }
         },
         {
@@ -98,7 +99,7 @@ const router = createRouter({
             meta: {
                 title: 'Cierre de Caja',
                 requiresAuth: true,
-                requiresPermission: 'reportes.ver'
+                requiresPermission: 'cierre.ver'
             }
         },
         {
