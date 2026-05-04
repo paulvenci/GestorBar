@@ -1,553 +1,355 @@
 <template>
   <div class="space-y-6">
-    <!-- Header con Selector de Fecha -->
+    <!-- Header -->
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg">
-      <div class="flex items-center gap-3">
-        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Día Operativo:</label>
+      <div>
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white">
+          {{ modoAdmin ? 'Reporte Consolidado Diario' : 'Mi Cierre de Caja' }}
+        </h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          {{ modoAdmin ? 'Muestra el desglose por cajero del día seleccionado.' : 'Resumen de tus ventas del día.' }}
+        </p>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <label class="text-sm text-gray-600 dark:text-gray-300">Fecha:</label>
         <input 
           type="date" 
           v-model="cierreCajaStore.fechaSeleccionada"
           @change="cargarDatos"
           class="rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
         />
-        <button
-          @click="cargarHoy"
-          class="px-3 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-md transition-colors"
-        >
+        <button @click="cargarHoy" class="px-3 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-md transition-colors">
           Hoy
         </button>
-      </div>
-
-      <div class="text-right">
-        <p class="text-xs text-gray-500 dark:text-gray-400">Horario Operativo</p>
-        <p class="text-sm font-medium text-gray-700 dark:text-gray-300">10:00 AM - 01:00 AM (+1)</p>
+        <button @click="cargarDatos" class="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded-md transition-colors flex items-center gap-1">
+          🔄 Actualizar
+        </button>
+        <button @click="imprimirReporte" class="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-md transition-colors flex items-center gap-1">
+          🖨️ Imprimir
+        </button>
       </div>
     </div>
 
-    <!-- Loading State -->
+    <!-- Toggle Admin/Personal (solo para admin/gerente) -->
+    <div v-if="esAdminOGerente" class="flex gap-2">
+      <button
+        @click="cambiarModo(false)"
+        :class="!modoAdmin ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
+        class="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+      >
+        👤 Mi Cierre
+      </button>
+      <button
+        @click="cambiarModo(true)"
+        :class="modoAdmin ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
+        class="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+      >
+        👥 Consolidado (Todos)
+      </button>
+    </div>
+
+    <!-- Loading -->
     <div v-if="cierreCajaStore.loading" class="flex justify-center py-12">
       <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
     </div>
 
-    <!-- Content -->
     <template v-else>
-      <!-- Turnos del Día -->
-      <div v-if="cierreCajaStore.turnos.length > 0" class="space-y-4">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-          Turnos del Día ({{ cierreCajaStore.turnos.length }})
-        </h3>
+      <!-- ═══════ VISTA ADMIN: Tabla Consolidada ═══════ -->
+      <template v-if="modoAdmin">
+        <div v-if="cierreCajaStore.cajeros.length > 0">
+          <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th class="w-8 px-2 py-3"></th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Cajero</th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Efectivo</th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Tarjeta</th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Transferencia</th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Crédito</th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Total Recaudado</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <template v-for="cajero in cierreCajaStore.cajeros" :key="cajero.usuario_id">
+                  <!-- Fila del cajero -->
+                  <tr 
+                    @click="toggleDesglose(cajero)"
+                    class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                    :class="expandidos.has(cajero.usuario_id) ? 'bg-primary-50 dark:bg-primary-900/20' : ''"
+                  >
+                    <td class="px-2 py-4 text-center">
+                      <span class="text-gray-400 transition-transform inline-block" :class="{ 'rotate-90': expandidos.has(cajero.usuario_id) }">▶</span>
+                    </td>
+                    <td class="px-4 py-4">
+                      <div class="flex items-center gap-2">
+                        <span class="font-semibold text-gray-900 dark:text-white">{{ cajero.nombre }}</span>
+                        <span v-if="cajero.tiene_turno_abierto" class="text-xs text-green-600 dark:text-green-400 font-medium bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded-full">En Turno</span>
+                      </div>
+                      <span class="text-xs text-gray-500 dark:text-gray-400">{{ cajero.cantidad_ventas }} ventas</span>
+                    </td>
+                    <td class="px-4 py-4 text-right font-medium text-green-600 dark:text-green-400">{{ formatCurrency(cajero.total_efectivo) }}</td>
+                    <td class="px-4 py-4 text-right font-medium text-blue-600 dark:text-blue-400">{{ formatCurrency(cajero.total_tarjeta) }}</td>
+                    <td class="px-4 py-4 text-right font-medium text-purple-600 dark:text-purple-400">{{ formatCurrency(cajero.total_transferencia) }}</td>
+                    <td class="px-4 py-4 text-right font-medium text-orange-600 dark:text-orange-400">{{ formatCurrency(cajero.total_credito) }}</td>
+                    <td class="px-4 py-4 text-right text-lg font-bold text-gray-900 dark:text-white">{{ formatCurrency(cajero.total_recaudado) }}</td>
+                  </tr>
+                  <!-- Desglose expandido -->
+                  <tr v-if="expandidos.has(cajero.usuario_id)">
+                    <td colspan="7" class="px-6 py-4 bg-gray-50 dark:bg-gray-700/30">
+                      <DesgloseVentas :cajero="cajero" :cargando="cargandoDesglose.has(cajero.usuario_id)" />
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+              <!-- Footer TOTAL GENERAL -->
+              <tfoot>
+                <tr class="bg-gradient-to-r from-primary-600 to-primary-700 text-white">
+                  <td class="px-2 py-4"></td>
+                  <td class="px-4 py-4 font-bold text-sm uppercase">Total General:</td>
+                  <td class="px-4 py-4 text-right font-bold">EF: {{ formatCurrency(consolidado.total_efectivo) }}</td>
+                  <td class="px-4 py-4 text-right font-bold">TJ: {{ formatCurrency(consolidado.total_tarjeta) }}</td>
+                  <td class="px-4 py-4 text-right font-bold">TR: {{ formatCurrency(consolidado.total_transferencia) }}</td>
+                  <td class="px-4 py-4 text-right font-bold">CR: {{ formatCurrency(consolidado.total_credito) }}</td>
+                  <td class="px-4 py-4 text-right text-lg font-bold">{{ formatCurrency(consolidado.total_general) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+        <EmptyState v-else />
+      </template>
 
-        <div class="grid gap-4 md:grid-cols-2">
-          <div 
-            v-for="turno in cierreCajaStore.turnos" 
-            :key="turno.id"
-            class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
-          >
-            <!-- Header del Turno -->
-            <div class="flex justify-between items-start mb-3">
-              <div>
-                <p class="font-semibold text-gray-900 dark:text-white">
-                  {{ turno.usuario?.nombre || 'Usuario' }}
-                </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ formatTime(turno.hora_inicio) }} - {{ turno.hora_fin ? formatTime(turno.hora_fin) : 'Abierto' }}
-                </p>
-              </div>
-              <span 
-                :class="turno.estado === 'ABIERTO' 
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' 
-                  : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'"
-                class="px-2 py-0.5 text-xs font-medium rounded-full"
-              >
-                {{ turno.estado }}
-              </span>
+      <!-- ═══════ VISTA PERSONAL: Mi Cierre ═══════ -->
+      <template v-else>
+        <div v-if="miCierre">
+          <!-- Info del cajero -->
+          <div class="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-4">
+            <div>
+              <p class="text-xl font-bold text-gray-900 dark:text-white">{{ miCierre.nombre }}</p>
+              <p v-if="miCierre.tiene_turno_abierto && miCierre.turno_inicio" class="text-sm text-gray-500 dark:text-gray-400">
+                Turno actual desde las {{ formatTime(miCierre.turno_inicio) }}
+              </p>
             </div>
-
-            <!-- Totales por Método de Pago -->
-            <div class="grid grid-cols-2 gap-2 text-sm">
-              <div class="flex justify-between">
-                <span class="text-gray-500 dark:text-gray-400">Efectivo:</span>
-                <span class="font-medium text-green-600 dark:text-green-400">{{ formatCurrency(getTurnoValue(turno, 'total_efectivo')) }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-gray-500 dark:text-gray-400">Tarjeta:</span>
-                <span class="font-medium text-blue-600 dark:text-blue-400">{{ formatCurrency(getTurnoValue(turno, 'total_tarjeta')) }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-gray-500 dark:text-gray-400">Transferencia:</span>
-                <span class="font-medium text-purple-600 dark:text-purple-400">{{ formatCurrency(getTurnoValue(turno, 'total_transferencia')) }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-gray-500 dark:text-gray-400">Crédito:</span>
-                <span class="font-medium text-orange-600 dark:text-orange-400">{{ formatCurrency(getTurnoValue(turno, 'total_credito')) }}</span>
-              </div>
-            </div>
-
-            <!-- Total y Ventas -->
-            <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
-              <span class="text-gray-600 dark:text-gray-400">
-                {{ getTurnoValue(turno, 'cantidad_ventas') }} ventas
-                <span v-if="turno.estado === 'ABIERTO'" class="ml-1 inline-flex items-center">
-                  <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                  <span class="ml-1 text-xs text-green-600 dark:text-green-400">EN VIVO</span>
-                </span>
-              </span>
-              <span class="text-lg font-bold text-gray-900 dark:text-white">
-                {{ formatCurrency(calcularTotalTurno(turno)) }}
-              </span>
-            </div>
-
-            <!-- Observaciones -->
-            <p v-if="turno.observaciones" class="mt-2 text-xs text-gray-500 dark:text-gray-400 italic">
-              📝 {{ turno.observaciones }}
-            </p>
-
-            <!-- Botón Desglose de Ventas -->
-            <button
-              @click="toggleDesglose(turno)"
-              class="mt-3 w-full py-2 px-3 text-sm font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors flex items-center justify-center gap-2"
+            <span 
+              :class="miCierre.tiene_turno_abierto 
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' 
+                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'"
+              class="px-3 py-1.5 text-sm font-medium rounded-full flex items-center gap-1.5"
             >
-              <svg 
-                :class="turnosExpandidos.has(turno.id) ? 'rotate-180' : ''"
-                class="w-4 h-4 transition-transform" 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-              </svg>
-              {{ turnosExpandidos.has(turno.id) ? 'Ocultar' : 'Ver' }} Desglose de Ventas
-            </button>
+              <span :class="miCierre.tiene_turno_abierto ? 'bg-green-500' : 'bg-gray-400'" class="w-2 h-2 rounded-full" :style="miCierre.tiene_turno_abierto ? 'animation: pulse 2s infinite' : ''"></span>
+              {{ miCierre.tiene_turno_abierto ? 'En Turno' : 'Sin Turno' }}
+            </span>
+          </div>
 
-            <!-- Desglose Expandido -->
-            <div v-if="turnosExpandidos.has(turno.id)" class="mt-3 border-t border-gray-200 dark:border-gray-700 pt-3">
-              <!-- Loading State -->
-              <div v-if="cargandoDesglose.has(turno.id)" class="flex justify-center py-4">
-                <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
-              </div>
-
-              <!-- Desglose Cargado -->
-              <div v-else class="space-y-3">
-                <!-- Ventas DENTRO del Turno -->
-                <div class="bg-green-50 dark:bg-green-900/10 rounded-lg p-3">
-                  <div class="flex items-center justify-between mb-2">
-                    <h4 class="text-sm font-semibold text-green-800 dark:text-green-300 flex items-center gap-1">
-                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                      </svg>
-                      Ventas en Turno
-                    </h4>
-                    <span class="text-sm font-bold text-green-700 dark:text-green-300">
-                      {{ formatCurrency(turno.totales_dentro?.total || 0) }}
-                    </span>
-                  </div>
-                  
-                  <div v-if="turno.ventas_dentro_turno && turno.ventas_dentro_turno.length > 0" class="space-y-1">
-                    <div 
-                      v-for="venta in turno.ventas_dentro_turno" 
-                      :key="venta.id"
-                      class="flex justify-between text-xs bg-white dark:bg-gray-800 rounded px-2 py-1"
-                    >
-                      <span class="text-gray-600 dark:text-gray-400">
-                        #{{ venta.numero }} - {{ formatDateTime(venta.fecha) }}
-                      </span>
-                      <span class="font-medium text-gray-900 dark:text-white flex items-center gap-1">
-                        {{ formatCurrency(venta.total) }}
-                        <span class="text-xs text-gray-500">{{ venta.metodo_pago }}</span>
-                      </span>
-                    </div>
-                    <div class="text-xs text-green-700 dark:text-green-300 pt-1 flex justify-between font-medium">
-                      <span>{{ turno.totales_dentro?.cantidad || 0 }} ventas</span>
-                      <span>Total: {{ formatCurrency(turno.totales_dentro?.total || 0) }}</span>
-                    </div>
-                  </div>
-                  <p v-else class="text-xs text-gray-500 dark:text-gray-400 italic">
-                    Sin ventas registradas en turno
-                  </p>
-                </div>
-
-                <!-- Ventas FUERA del Turno -->
-                <div v-if="turno.ventas_fuera_turno && turno.ventas_fuera_turno.length > 0" class="bg-amber-50 dark:bg-amber-900/10 rounded-lg p-3">
-                  <div class="flex items-center justify-between mb-2">
-                    <h4 class="text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1">
-                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                      </svg>
-                      Ventas Fuera de Turno
-                    </h4>
-                    <span class="text-sm font-bold text-amber-700 dark:text-amber-300">
-                      {{ formatCurrency(turno.totales_fuera?.total || 0) }}
-                    </span>
-                  </div>
-                  
-                  <div class="space-y-1">
-                    <div 
-                      v-for="venta in turno.ventas_fuera_turno" 
-                      :key="venta.id"
-                      class="flex justify-between text-xs bg-white dark:bg-gray-800 rounded px-2 py-1"
-                    >
-                      <span class="text-gray-600 dark:text-gray-400">
-                        #{{ venta.numero }} - {{ formatDateTime(venta.fecha) }}
-                      </span>
-                      <span class="font-medium text-gray-900 dark:text-white flex items-center gap-1">
-                        {{ formatCurrency(venta.total) }}
-                        <span class="text-xs text-gray-500">{{ venta.metodo_pago }}</span>
-                      </span>
-                    </div>
-                    <div class="text-xs text-amber-700 dark:text-amber-300 pt-1 flex justify-between font-medium">
-                      <span>{{ turno.totales_fuera?.cantidad || 0 }} ventas</span>
-                      <span>Total: {{ formatCurrency(turno.totales_fuera?.total || 0) }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Resumen Comparativo -->
-                <div class="bg-gray-100 dark:bg-gray-700/50 rounded-lg p-3 border-l-4 border-primary-500">
-                  <h5 class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">📊 Resumen</h5>
-                  <div class="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span class="text-gray-500 dark:text-gray-400">En turno:</span>
-                      <span class="ml-1 font-bold text-green-600 dark:text-green-400">{{ formatCurrency(turno.totales_dentro?.total || 0) }}</span>
-                    </div>
-                    <div>
-                      <span class="text-gray-500 dark:text-gray-400">Fuera:</span>
-                      <span class="ml-1 font-bold text-amber-600 dark:text-amber-400">{{ formatCurrency(turno.totales_fuera?.total || 0) }}</span>
-                    </div>
-                    <div class="col-span-2 pt-1 border-t border-gray-300 dark:border-gray-600">
-                      <span class="text-gray-700 dark:text-gray-300 font-semibold">Total Usuario:</span>
-                      <span class="ml-1 font-bold text-gray-900 dark:text-white">
-                        {{ formatCurrency((turno.totales_dentro?.total || 0) + (turno.totales_fuera?.total || 0)) }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+          <!-- Tarjetas de totales -->
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+            <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center">
+              <p class="text-xs font-medium text-green-600 dark:text-green-400 uppercase">Efectivo</p>
+              <p class="text-xl font-bold text-green-700 dark:text-green-300 mt-1">{{ formatCurrency(miCierre.total_efectivo) }}</p>
+            </div>
+            <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center">
+              <p class="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase">Tarjeta</p>
+              <p class="text-xl font-bold text-blue-700 dark:text-blue-300 mt-1">{{ formatCurrency(miCierre.total_tarjeta) }}</p>
+            </div>
+            <div class="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4 text-center">
+              <p class="text-xs font-medium text-purple-600 dark:text-purple-400 uppercase">Transferencia</p>
+              <p class="text-xl font-bold text-purple-700 dark:text-purple-300 mt-1">{{ formatCurrency(miCierre.total_transferencia) }}</p>
+            </div>
+            <div class="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4 text-center">
+              <p class="text-xs font-medium text-orange-600 dark:text-orange-400 uppercase">Crédito</p>
+              <p class="text-xl font-bold text-orange-700 dark:text-orange-300 mt-1">{{ formatCurrency(miCierre.total_credito) }}</p>
+            </div>
+            <div class="bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg p-4 text-center text-white col-span-2 sm:col-span-1">
+              <p class="text-xs font-medium uppercase opacity-80">Total Recaudado</p>
+              <p class="text-2xl font-bold mt-1">{{ formatCurrency(miCierre.total_recaudado) }}</p>
+              <p class="text-xs opacity-70 mt-0.5">{{ miCierre.cantidad_ventas }} ventas</p>
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- Sin Turnos -->
-      <div v-else class="text-center py-12 text-gray-500 dark:text-gray-400">
-        <svg class="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <p>No hay turnos registrados para este día</p>
-      </div>
+          <!-- Botón desglose -->
+          <button
+            @click="toggleDesglosePersonal"
+            class="w-full py-3 px-4 text-sm font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors flex items-center justify-center gap-2 border border-primary-200 dark:border-primary-800"
+          >
+            <svg :class="desglosePersonalAbierto ? 'rotate-180' : ''" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+            {{ desglosePersonalAbierto ? 'Ocultar' : 'Ver' }} Desglose de Ventas
+          </button>
 
-      <!-- Consolidado del Día -->
-      <div v-if="cierreCajaStore.turnos.length > 0" class="bg-gradient-to-r from-primary-600 to-primary-700 rounded-xl p-6 text-white">
-        <h3 class="text-lg font-semibold mb-4">📊 Consolidado del Día</h3>
-        
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-          <div class="bg-white/10 rounded-lg p-3">
-            <p class="text-xs opacity-80">Efectivo</p>
-            <p class="text-xl font-bold">{{ formatCurrency(consolidado.total_efectivo) }}</p>
-          </div>
-          <div class="bg-white/10 rounded-lg p-3">
-            <p class="text-xs opacity-80">Tarjeta</p>
-            <p class="text-xl font-bold">{{ formatCurrency(consolidado.total_tarjeta) }}</p>
-          </div>
-          <div class="bg-white/10 rounded-lg p-3">
-            <p class="text-xs opacity-80">Transferencia</p>
-            <p class="text-xl font-bold">{{ formatCurrency(consolidado.total_transferencia) }}</p>
-          </div>
-          <div class="bg-white/10 rounded-lg p-3">
-            <p class="text-xs opacity-80">Crédito</p>
-            <p class="text-xl font-bold">{{ formatCurrency(consolidado.total_credito) }}</p>
+          <!-- Desglose expandido -->
+          <div v-if="desglosePersonalAbierto" class="mt-4">
+            <DesgloseVentas :cajero="miCierre" :cargando="cargandoDesglosePersonal" />
           </div>
         </div>
-
-        <div class="flex flex-col sm:flex-row justify-between items-center pt-4 border-t border-white/20">
-          <div class="text-center sm:text-left mb-2 sm:mb-0">
-            <p class="text-sm opacity-80">Total de Ventas</p>
-            <p class="text-lg font-medium">{{ consolidado.cantidad_ventas }} transacciones</p>
-          </div>
-          <div class="text-center sm:text-right">
-            <p class="text-sm opacity-80">Total Recaudado</p>
-            <p class="text-3xl font-bold">{{ formatCurrency(consolidado.total_general) }}</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Botón Imprimir -->
-      <div v-if="cierreCajaStore.turnos.length > 0" class="flex justify-end">
-        <button
-          @click="imprimirReporte"
-          class="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-lg transition-colors"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-          </svg>
-          Imprimir Reporte
-        </button>
-      </div>
+        <EmptyState v-else />
+      </template>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, onUnmounted } from 'vue'
-import { useCierreCajaStore } from '@/stores/cierreCaja'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useCierreCajaStore, type CajeroDia } from '@/stores/cierreCaja'
+import { useAuthStore } from '@/stores/auth'
 import { useConfiguracionStore } from '@/stores/configuracion'
 import { formatCurrency } from '@/utils/formatters'
+import DesgloseVentas from './DesgloseVentas.vue'
+import EmptyState from './CierreEmptyState.vue'
 
 const cierreCajaStore = useCierreCajaStore()
+const authStore = useAuthStore()
 const configStore = useConfiguracionStore()
 
-// Estado para estadísticas en vivo de turnos abiertos
-const liveStats = ref<Record<string, {
-  total_efectivo: number
-  total_tarjeta: number
-  total_transferencia: number
-  total_credito: number
-  cantidad_ventas: number
-  total_general: number
-}>>({})
-
-// Estado para expandir desglose de ventas
-const turnosExpandidos = ref<Set<string>>(new Set())
+// Estado local
+const expandidos = ref<Set<string>>(new Set())
 const cargandoDesglose = ref<Set<string>>(new Set())
+const desglosePersonalAbierto = ref(false)
+const cargandoDesglosePersonal = ref(false)
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
+// Computed
+const esAdminOGerente = computed(() => {
+  const rol = authStore.userRole
+  return rol === 'Administrador' || rol === 'Gerente'
+})
+
+const modoAdmin = computed(() => cierreCajaStore.modoAdmin)
+const miCierre = computed(() => cierreCajaStore.miCierre)
 const consolidado = computed(() => cierreCajaStore.consolidadoDia)
 
+// Methods
 const formatTime = (dateString: string) => {
   const date = new Date(dateString)
   return date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
 }
 
-const calcularTotalTurno = (turno: any) => {
-  // Si hay stats en vivo para este turno, usarlas
-  if (turno.estado === 'ABIERTO' && liveStats.value[turno.id]) {
-    return liveStats.value[turno.id]?.total_general || 0
-  }
-  return Number(turno.total_efectivo || 0) + 
-         Number(turno.total_tarjeta || 0) + 
-         Number(turno.total_transferencia || 0) + 
-         Number(turno.total_credito || 0)
-}
-
-// Obtener el valor correcto para mostrar (live o estático)
-const getTurnoValue = (turno: any, field: 'total_efectivo' | 'total_tarjeta' | 'total_transferencia' | 'total_credito' | 'cantidad_ventas') => {
-  if (turno.estado === 'ABIERTO' && liveStats.value[turno.id]) {
-    return liveStats.value[turno.id]?.[field] || 0
-  }
-  return turno[field]
-}
-
 const cargarDatos = async () => {
-  await cierreCajaStore.fetchTurnosDia()
-  await cargarEstadisticasVivo()
-}
-
-const cargarEstadisticasVivo = async () => {
-  const turnosAbiertos = cierreCajaStore.turnos.filter(t => t.estado === 'ABIERTO')
-  for (const turno of turnosAbiertos) {
-    const stats = await cierreCajaStore.calcularEstadisticasTurnoVivo(turno.id)
-    liveStats.value[turno.id] = stats
+  expandidos.value.clear()
+  desglosePersonalAbierto.value = false
+  if (modoAdmin.value) {
+    await cierreCajaStore.fetchConsolidado()
+  } else {
+    await cierreCajaStore.fetchMiCierre()
   }
 }
 
 const cargarHoy = () => {
   const now = new Date()
-  // Si es antes de las 5 AM, asumimos que es el día operativo anterior
-  if (now.getHours() < 5) {
+  if (now.getHours() < 6) {
     now.setDate(now.getDate() - 1)
   }
   cierreCajaStore.fechaSeleccionada = now.toLocaleDateString('en-CA')
   cargarDatos()
 }
 
-const toggleDesglose = async (turno: any) => {
-  const turnoId = turno.id
-  
-  if (turnosExpandidos.value.has(turnoId)) {
-    // Colapsar
-    turnosExpandidos.value.delete(turnoId)
+const cambiarModo = (admin: boolean) => {
+  expandidos.value.clear()
+  desglosePersonalAbierto.value = false
+  if (admin) {
+    cierreCajaStore.fetchConsolidado()
   } else {
-    // Expandir y cargar desglose si no existe
-    turnosExpandidos.value.add(turnoId)
-    
-    if (!turno.ventas_dentro_turno) {
-      cargandoDesglose.value.add(turnoId)
-      const desglose = await cierreCajaStore.fetchVentasDesgloseTurno(
-        turno.id,
-        turno.usuario_id,
-        turno.hora_inicio,
-        turno.hora_fin
-      )
-      
-      // Actualizar el turno con el desglose
-      Object.assign(turno, desglose)
-      cargandoDesglose.value.delete(turnoId)
+    cierreCajaStore.fetchMiCierre()
+  }
+}
+
+const toggleDesglose = async (cajero: CajeroDia) => {
+  const id = cajero.usuario_id
+  if (expandidos.value.has(id)) {
+    expandidos.value.delete(id)
+  } else {
+    expandidos.value.add(id)
+    if (!cajero.ventas_en_turno) {
+      cargandoDesglose.value.add(id)
+      await cierreCajaStore.fetchDesglose(id)
+      cargandoDesglose.value.delete(id)
     }
   }
 }
 
-const formatDateTime = (dateString: string) => {
-  const date = new Date(dateString)
-  return date.toLocaleString('es-CL', { 
-    hour: '2-digit', 
-    minute: '2-digit',
-    day: '2-digit',
-    month: '2-digit'
-  })
+const toggleDesglosePersonal = async () => {
+  desglosePersonalAbierto.value = !desglosePersonalAbierto.value
+  if (desglosePersonalAbierto.value && miCierre.value && !miCierre.value.ventas_en_turno) {
+    cargandoDesglosePersonal.value = true
+    await cierreCajaStore.fetchDesglose(miCierre.value.usuario_id)
+    cargandoDesglosePersonal.value = false
+  }
 }
 
-const imprimirReporte = async () => {
-  const turnos = cierreCajaStore.turnos
+const imprimirReporte = () => {
   const fecha = cierreCajaStore.fechaSeleccionada
-  
-  // Load desglose for all turnos before printing
-  for (const turno of turnos) {
-    if (!turno.ventas_dentro_turno) {
-      const desglose = await cierreCajaStore.fetchVentasDesgloseTurno(
-        turno.id,
-        turno.usuario_id,
-        turno.hora_inicio,
-        turno.hora_fin
-      )
-      Object.assign(turno, desglose)
-    }
-  }
-
+  const cajeros = cierreCajaStore.cajeros
   const W = 42
   const sep = '='.repeat(W)
   const dash = '-'.repeat(W)
-  
-  const pad = (left: string, right: string) => {
-    const space = W - left.length - right.length
-    return left + ' '.repeat(Math.max(1, space)) + right
-  }
-  
-  const center = (text: string) => {
-    const space = Math.max(0, W - text.length)
-    return ' '.repeat(Math.floor(space / 2)) + text
-  }
+  const pad = (l: string, r: string) => l + ' '.repeat(Math.max(1, W - l.length - r.length)) + r
+  const center = (t: string) => ' '.repeat(Math.max(0, Math.floor((W - t.length) / 2))) + t
 
   let lines: string[] = []
-  
   lines.push(sep)
-  lines.push(center('CIERRE DE CAJA'))
-  lines.push(center('GestorBar'))
+  lines.push(center(modoAdmin.value ? 'CONSOLIDADO DIARIO' : 'MI CIERRE DE CAJA'))
   lines.push(center(configStore.nombreNegocio))
   lines.push(sep)
   lines.push(pad('Fecha:', fecha))
-  lines.push(pad('Horario:', '10:00 AM - 01:00 AM (+1)'))
   lines.push(sep)
-  lines.push(center(`TURNOS (${turnos.length})`))
-  lines.push(dash)
-  
-  for (const turno of turnos) {
-    const stats = (turno.estado === 'ABIERTO' && liveStats.value[turno.id]) 
-      ? liveStats.value[turno.id]! 
-      : turno
-    
-    const nombre = (turno.usuario?.nombre || 'Usuario').substring(0, 20)
-    const inicio = formatTime(turno.hora_inicio)
-    const fin = turno.hora_fin ? formatTime(turno.hora_fin) : 'Abierto'
-    const total = calcularTotalTurno(turno)
-    const estado = turno.estado === 'ABIERTO' ? 'ABT' : 'CRD'
-    
-    lines.push('')
-    lines.push(pad(nombre.toUpperCase(), `[${estado}]`))
-    lines.push(pad('', `${inicio} - ${fin}`))
-    lines.push(dash)
-    lines.push(pad('Efectivo:', formatCurrency(Number(stats.total_efectivo || 0))))
-    lines.push(pad('Tarjeta:', formatCurrency(Number(stats.total_tarjeta || 0))))
-    lines.push(pad('Transferencia:', formatCurrency(Number(stats.total_transferencia || 0))))
-    lines.push(pad('Credito:', formatCurrency(Number(stats.total_credito || 0))))
-    lines.push(dash)
-    lines.push(pad(`${stats.cantidad_ventas || 0} ventas`, formatCurrency(total)))
 
-    // Desglose - siempre mostrar
-    if (turno.ventas_dentro_turno && turno.ventas_dentro_turno.length > 0) {
-      lines.push('')
-      lines.push(center('-- Ventas en Turno --'))
-      for (const v of turno.ventas_dentro_turno) {
-        const info = `#${v.numero} ${formatDateTime(v.fecha)}`
-        lines.push(pad(info.substring(0, 26), formatCurrency(v.total)))
-      }
-      lines.push(dash)
-      lines.push(pad(`${turno.totales_dentro?.cantidad || 0} ventas`, formatCurrency(turno.totales_dentro?.total || 0)))
-    }
-
+  for (const c of cajeros) {
+    const estado = c.tiene_turno_abierto ? '[EN TURNO]' : '[CERRADO]'
     lines.push('')
-    lines.push(center('-- Ventas Fuera Turno --'))
-    if (turno.ventas_fuera_turno && turno.ventas_fuera_turno.length > 0) {
-      for (const v of turno.ventas_fuera_turno) {
-        const info = `#${v.numero} ${formatDateTime(v.fecha)}`
-        lines.push(pad(info.substring(0, 26), formatCurrency(v.total)))
-      }
-      lines.push(dash)
-      lines.push(pad(`${turno.totales_fuera?.cantidad || 0} ventas`, formatCurrency(turno.totales_fuera?.total || 0)))
-    } else {
-      lines.push(center('Sin ventas'))
-    }
-    
+    lines.push(pad(c.nombre.toUpperCase(), estado))
+    lines.push(dash)
+    lines.push(pad('Efectivo:', formatCurrency(c.total_efectivo)))
+    lines.push(pad('Tarjeta:', formatCurrency(c.total_tarjeta)))
+    lines.push(pad('Transferencia:', formatCurrency(c.total_transferencia)))
+    lines.push(pad('Credito:', formatCurrency(c.total_credito)))
+    lines.push(dash)
+    lines.push(pad(`${c.cantidad_ventas} ventas`, formatCurrency(c.total_recaudado)))
+    lines.push(sep)
+  }
+
+  if (modoAdmin.value && cajeros.length > 1) {
+    const c = consolidado.value
+    lines.push('')
+    lines.push(center('TOTAL GENERAL'))
+    lines.push(dash)
+    lines.push(pad('Efectivo:', formatCurrency(c.total_efectivo)))
+    lines.push(pad('Tarjeta:', formatCurrency(c.total_tarjeta)))
+    lines.push(pad('Transferencia:', formatCurrency(c.total_transferencia)))
+    lines.push(pad('Credito:', formatCurrency(c.total_credito)))
+    lines.push(sep)
+    lines.push(pad(`${c.cantidad_ventas} ventas`, formatCurrency(c.total_general)))
     lines.push(sep)
   }
 
   lines.push('')
   lines.push(center(new Date().toLocaleString('es-CL')))
   lines.push('')
-  lines.push('')
-  
+
   const sw = screen.width
   const sh = screen.height
-  const printWindow = window.open('', '_blank', `width=${sw},height=${sh},left=0,top=0`)
-  if (!printWindow) return
-  
-  printWindow.document.write(`<!DOCTYPE html>
-<html>
-<head>
-<title>Cierre - ${fecha}</title>
-<style>
-@page { size: 80mm auto; margin: 0; }
-body {
-  font-family: 'Courier New', monospace;
-  font-size: 9px;
-  line-height: 1.3;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  justify-content: center;
-  color: #000;
-  background: #fff;
-}
-pre {
-  margin: 2mm;
-  white-space: pre-wrap;
-  font-family: inherit;
-  font-size: inherit;
-}
-</style>
-</head>
-<body>
-<pre>${lines.join('\n')}</pre>
-<script>
-window.onload = function() {
-  window.print();
-  setTimeout(function() { window.close(); }, 500);
-};
-<\/script>
-</body>
-</html>`)
-  printWindow.document.close()
+  const pw = window.open('', '_blank', `width=${sw},height=${sh},left=0,top=0`)
+  if (!pw) return
+  pw.document.write(`<!DOCTYPE html><html><head><title>Cierre - ${fecha}</title>
+<style>@page{size:80mm auto;margin:0}body{font-family:'Courier New',monospace;font-size:9px;line-height:1.3;margin:0;padding:0;display:flex;justify-content:center;color:#000;background:#fff}pre{margin:2mm;white-space:pre-wrap;font-family:inherit;font-size:inherit}</style>
+</head><body><pre>${lines.join('\n')}</pre>
+<script>window.onload=function(){window.print();setTimeout(function(){window.close()},500)};<\/script></body></html>`)
+  pw.document.close()
 }
 
 onMounted(async () => {
   await cargarDatos()
-  // Actualizar estadísticas en vivo cada 30 segundos
-  refreshInterval = setInterval(cargarEstadisticasVivo, 30000)
+  refreshInterval = setInterval(() => {
+    if (modoAdmin.value) {
+      cierreCajaStore.fetchConsolidado()
+    } else {
+      cierreCajaStore.fetchMiCierre()
+    }
+  }, 60000)
 })
 
 onUnmounted(() => {
-  if (refreshInterval) {
-    clearInterval(refreshInterval)
-  }
+  if (refreshInterval) clearInterval(refreshInterval)
 })
 </script>
-

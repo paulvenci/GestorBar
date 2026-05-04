@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia'
 import { supabase } from '@/lib/supabase'
+import { useAuthStore } from './auth'
+
+// ── Interfaces ──────────────────────────────────────────────────
 
 interface VentaResumen {
     id: string
@@ -8,42 +11,35 @@ interface VentaResumen {
     total: number
     metodo_pago: string
     turno_id: string | null
-    vendedor_id: string | null
 }
 
-interface TurnoConUsuario {
-    id: string
+interface TotalesPorMetodo {
+    efectivo: number
+    tarjeta: number
+    transferencia: number
+    credito: number
+    total: number
+    cantidad: number
+}
+
+export interface CajeroDia {
     usuario_id: string
-    hora_inicio: string
-    hora_fin: string | null
+    nombre: string
+    tiene_turno_abierto: boolean
+    turno_inicio: string | null
+    turno_ids_del_dia: string[]
+    // Totales consolidados (TODAS las ventas del usuario ese día)
     total_efectivo: number
     total_tarjeta: number
     total_transferencia: number
     total_credito: number
     cantidad_ventas: number
-    estado: 'ABIERTO' | 'CERRADO'
-    observaciones: string | null
-    usuario: {
-        nombre: string
-    }
-    ventas_dentro_turno?: VentaResumen[]
+    total_recaudado: number
+    // Desglose (cargado on-demand al expandir)
+    ventas_en_turno?: VentaResumen[]
     ventas_fuera_turno?: VentaResumen[]
-    totales_dentro?: {
-        efectivo: number
-        tarjeta: number
-        transferencia: number
-        credito: number
-        total: number
-        cantidad: number
-    }
-    totales_fuera?: {
-        efectivo: number
-        tarjeta: number
-        transferencia: number
-        credito: number
-        total: number
-        cantidad: number
-    }
+    totales_en_turno?: TotalesPorMetodo
+    totales_fuera_turno?: TotalesPorMetodo
 }
 
 interface ConsolidadoDia {
@@ -56,68 +52,87 @@ interface ConsolidadoDia {
 }
 
 interface CierreCajaState {
-    turnos: TurnoConUsuario[]
+    cajeros: CajeroDia[]
     fechaSeleccionada: string
     loading: boolean
     error: string | null
+    modoAdmin: boolean
 }
 
-// Helper para obtener fecha operativa (10 AM - 1 AM del día siguiente)
-function getFechaOperativaRange(fecha: string): { inicio: string, fin: string } {
-    // fecha viene como 'YYYY-MM-DD' en hora local
+// ── Helpers ─────────────────────────────────────────────────────
+
+/**
+ * Rango del día operativo: 06:00 AM del día seleccionado → 06:00 AM del día siguiente
+ * Consistente con el módulo de Reportes.
+ */
+function getDiaOperativoRange(fecha: string): { inicio: string, fin: string } {
     const parts = fecha.split('-').map(Number)
     const year = parts[0] || new Date().getFullYear()
     const month = parts[1] || (new Date().getMonth() + 1)
     const day = parts[2] || new Date().getDate()
 
-    // Crear objeto Date en hora local (10:00:00 del día operativo)
-    const baseDate = new Date(year, month - 1, day, 10, 0, 0)
-
-    // Fin es 1:00 AM del día siguiente (calendario)
-    const endDate = new Date(year, month - 1, day + 1, 1, 0, 0)
+    const inicio = new Date(year, month - 1, day, 6, 0, 0)
+    const fin = new Date(year, month - 1, day + 1, 6, 0, 0)
 
     return {
-        inicio: baseDate.toISOString(),
-        fin: endDate.toISOString()
+        inicio: inicio.toISOString(),
+        fin: fin.toISOString()
     }
 }
+
+/**
+ * Clasifica un array de ventas sumando totales por método de pago
+ */
+function calcularTotalesPorMetodo(ventas: VentaResumen[]): TotalesPorMetodo {
+    const totales: TotalesPorMetodo = {
+        efectivo: 0, tarjeta: 0, transferencia: 0, credito: 0, total: 0, cantidad: ventas.length
+    }
+    for (const v of ventas) {
+        const monto = Number(v.total) || 0
+        totales.total += monto
+        switch (v.metodo_pago) {
+            case 'EFECTIVO': totales.efectivo += monto; break
+            case 'TARJETA': totales.tarjeta += monto; break
+            case 'TRANSFERENCIA': totales.transferencia += monto; break
+            case 'CREDITO': totales.credito += monto; break
+        }
+    }
+    return totales
+}
+
+// ── Store ───────────────────────────────────────────────────────
 
 export const useCierreCajaStore = defineStore('cierreCaja', {
     state: (): CierreCajaState => {
         const now = new Date()
-        // Si es antes de las 5 AM, asumimos que es el día operativo anterior
-        if (now.getHours() < 5) {
+        // Si es antes de las 6 AM, día operativo es el anterior
+        if (now.getHours() < 6) {
             now.setDate(now.getDate() - 1)
         }
-        const todayLocal = now.toLocaleDateString('en-CA') // Formato YYYY-MM-DD
+        const todayLocal = now.toLocaleDateString('en-CA') // YYYY-MM-DD
 
         return {
-            turnos: [],
+            cajeros: [],
             fechaSeleccionada: todayLocal,
             loading: false,
-            error: null
+            error: null,
+            modoAdmin: false
         }
     },
 
     getters: {
         /**
-         * Calcula el consolidado de todos los turnos del día
+         * Consolidado sumando todos los cajeros del día
          */
         consolidadoDia: (state): ConsolidadoDia => {
-            return state.turnos.reduce((acc, turno) => {
-                return {
-                    total_efectivo: acc.total_efectivo + Number(turno.total_efectivo || 0),
-                    total_tarjeta: acc.total_tarjeta + Number(turno.total_tarjeta || 0),
-                    total_transferencia: acc.total_transferencia + Number(turno.total_transferencia || 0),
-                    total_credito: acc.total_credito + Number(turno.total_credito || 0),
-                    cantidad_ventas: acc.cantidad_ventas + (turno.cantidad_ventas || 0),
-                    total_general: acc.total_general +
-                        Number(turno.total_efectivo || 0) +
-                        Number(turno.total_tarjeta || 0) +
-                        Number(turno.total_transferencia || 0) +
-                        Number(turno.total_credito || 0)
-                }
-            }, {
+            return state.cajeros.reduce((acc, c) => ({
+                total_efectivo: acc.total_efectivo + c.total_efectivo,
+                total_tarjeta: acc.total_tarjeta + c.total_tarjeta,
+                total_transferencia: acc.total_transferencia + c.total_transferencia,
+                total_credito: acc.total_credito + c.total_credito,
+                cantidad_ventas: acc.cantidad_ventas + c.cantidad_ventas,
+                total_general: acc.total_general + c.total_recaudado
+            }), {
                 total_efectivo: 0,
                 total_tarjeta: 0,
                 total_transferencia: 0,
@@ -128,44 +143,38 @@ export const useCierreCajaStore = defineStore('cierreCaja', {
         },
 
         /**
-         * Turnos cerrados del día
+         * El cajero del usuario logueado (primer y único en vista personal)
          */
-        turnosCerrados: (state) => state.turnos.filter(t => t.estado === 'CERRADO'),
-
-        /**
-         * Turnos abiertos del día
-         */
-        turnosAbiertos: (state) => state.turnos.filter(t => t.estado === 'ABIERTO')
+        miCierre: (state): CajeroDia | null => {
+            return state.cajeros.length > 0 && state.cajeros[0] ? state.cajeros[0] : null
+        }
     },
 
     actions: {
         /**
-         * Obtiene todos los turnos del día operativo
+         * Obtiene las ventas del usuario logueado para el día seleccionado.
+         * Vista personal del cajero.
          */
-        async fetchTurnosDia(fecha?: string) {
+        async fetchMiCierre(fecha?: string) {
+            const authStore = useAuthStore()
+            if (!authStore.usuario?.id) return
+
+            this.modoAdmin = false
             this.loading = true
             this.error = null
 
             const fechaBuscar = fecha || this.fechaSeleccionada
             this.fechaSeleccionada = fechaBuscar
 
-            const { inicio, fin } = getFechaOperativaRange(fechaBuscar)
-
             try {
-                const { data, error } = await supabase
-                    .from('turnos_mesero')
-                    .select(`
-                        *,
-                        usuario:usuarios(nombre)
-                    `)
-                    .gte('hora_inicio', inicio)
-                    .lt('hora_inicio', fin)
-                    .order('hora_inicio', { ascending: true })
-
-                if (error) throw error
-                this.turnos = data || []
+                const cajero = await this._buildCajeroData(
+                    authStore.usuario.id,
+                    authStore.usuario.nombre || 'Usuario',
+                    fechaBuscar
+                )
+                this.cajeros = [cajero]
             } catch (err: any) {
-                console.error('Error al obtener turnos del día:', err)
+                console.error('Error en fetchMiCierre:', err)
                 this.error = err.message
             } finally {
                 this.loading = false
@@ -173,227 +182,232 @@ export const useCierreCajaStore = defineStore('cierreCaja', {
         },
 
         /**
-         * Obtiene las ventas de un turno específico
+         * Obtiene las ventas de TODOS los cajeros del día.
+         * Vista consolidada para Admin/Gerente.
          */
-        async fetchVentasTurno(turnoId: string) {
+        async fetchConsolidado(fecha?: string) {
+            this.modoAdmin = true
+            this.loading = true
+            this.error = null
+
+            const fechaBuscar = fecha || this.fechaSeleccionada
+            this.fechaSeleccionada = fechaBuscar
+            const { inicio, fin } = getDiaOperativoRange(fechaBuscar)
+
             try {
-                const { data, error } = await supabase
-                    .from('ventas')
-                    .select(`
-                        *,
-                        items:items_venta(*)
-                    `)
-                    .eq('turno_id', turnoId)
-                    .eq('estado', 'COMPLETADA')
-                    .order('fecha', { ascending: true })
-
-                if (error) throw error
-                return data || []
-            } catch (err: any) {
-                console.error('Error al obtener ventas del turno:', err)
-                return []
-            }
-        },
-
-        /**
-         * Cambia la fecha seleccionada y recarga los turnos
-         */
-        async cambiarFecha(fecha: string) {
-            await this.fetchTurnosDia(fecha)
-        },
-
-        /**
-         * Calcula estadísticas en vivo para un turno abierto
-         * Consulta las ventas asociadas al turno directamente
-         */
-        async calcularEstadisticasTurnoVivo(turnoId: string): Promise<{
-            total_efectivo: number
-            total_tarjeta: number
-            total_transferencia: number
-            total_credito: number
-            cantidad_ventas: number
-            total_general: number
-        }> {
-            try {
-                const { data: ventas, error } = await supabase
-                    .from('ventas')
-                    .select('total, metodo_pago')
-                    .eq('turno_id', turnoId)
-                    .eq('estado', 'COMPLETADA')
-
-                if (error) throw error
-
-                const stats = {
-                    total_efectivo: 0,
-                    total_tarjeta: 0,
-                    total_transferencia: 0,
-                    total_credito: 0,
-                    cantidad_ventas: 0,
-                    total_general: 0
-                }
-
-                for (const venta of (ventas || [])) {
-                    const total = Number(venta.total) || 0
-                    stats.total_general += total
-                    stats.cantidad_ventas++
-
-                    switch (venta.metodo_pago) {
-                        case 'EFECTIVO':
-                            stats.total_efectivo += total
-                            break
-                        case 'TARJETA':
-                            stats.total_tarjeta += total
-                            break
-                        case 'TRANSFERENCIA':
-                            stats.total_transferencia += total
-                            break
-                        case 'CREDITO':
-                            stats.total_credito += total
-                            break
-                    }
-                }
-
-                return stats
-            } catch (err: any) {
-                console.error('Error calculando estadísticas en vivo:', err)
-                return {
-                    total_efectivo: 0,
-                    total_tarjeta: 0,
-                    total_transferencia: 0,
-                    total_credito: 0,
-                    cantidad_ventas: 0,
-                    total_general: 0
-                }
-            }
-        },
-
-        /**
-         * Obtiene el desglose de ventas de un turno
-         * Separa las ventas DENTRO del turno de las FUERA del turno
-         */
-        async fetchVentasDesgloseTurno(turnoId: string, usuarioId: string, horaInicio: string, horaFin: string | null) {
-            try {
-                // Determinar el rango de fechas del turno
-                const inicio = new Date(horaInicio)
-                const fin = horaFin ? new Date(horaFin) : new Date()
-
-                // Obtener todas las ventas del usuario en el período del turno
-                const { data: ventas, error } = await supabase
+                // 1. Obtener todas las ventas COMPLETADAS del día, agrupadas por vendedor
+                const { data: ventas, error: ventasError } = await supabase
                     .from('ventas')
                     .select('id, numero, fecha, total, metodo_pago, turno_id, vendedor_id')
-                    .eq('vendedor_id', usuarioId)
                     .eq('estado', 'COMPLETADA')
-                    .gte('fecha', inicio.toISOString())
-                    .lte('fecha', fin.toISOString())
+                    .gte('fecha', inicio)
+                    .lt('fecha', fin)
                     .order('fecha', { ascending: true })
 
-                if (error) throw error
+                if (ventasError) throw ventasError
 
-                // Separar ventas dentro y fuera del turno
-                const ventasDentro: VentaResumen[] = []
-                const ventasFuera: VentaResumen[] = []
+                // 2. Agrupar ventas por vendedor_id
+                const ventasPorVendedor = new Map<string, VentaResumen[]>()
+                const vendedorIds = new Set<string>()
 
-                const totalesDentro = {
-                    efectivo: 0,
-                    tarjeta: 0,
-                    transferencia: 0,
-                    credito: 0,
-                    total: 0,
-                    cantidad: 0
-                }
-
-                const totalesFuera = {
-                    efectivo: 0,
-                    tarjeta: 0,
-                    transferencia: 0,
-                    credito: 0,
-                    total: 0,
-                    cantidad: 0
-                }
-
-                for (const venta of (ventas || [])) {
-                    const ventaResumen: VentaResumen = {
-                        id: venta.id,
-                        numero: venta.numero,
-                        fecha: venta.fecha,
-                        total: Number(venta.total) || 0,
-                        metodo_pago: venta.metodo_pago,
-                        turno_id: venta.turno_id,
-                        vendedor_id: venta.vendedor_id
+                for (const v of (ventas || [])) {
+                    if (!v.vendedor_id) continue
+                    vendedorIds.add(v.vendedor_id)
+                    if (!ventasPorVendedor.has(v.vendedor_id)) {
+                        ventasPorVendedor.set(v.vendedor_id, [])
                     }
-
-                    const total = ventaResumen.total
-
-                    // Clasificar la venta
-                    if (venta.turno_id === turnoId) {
-                        ventasDentro.push(ventaResumen)
-                        totalesDentro.total += total
-                        totalesDentro.cantidad++
-
-                        switch (venta.metodo_pago) {
-                            case 'EFECTIVO':
-                                totalesDentro.efectivo += total
-                                break
-                            case 'TARJETA':
-                                totalesDentro.tarjeta += total
-                                break
-                            case 'TRANSFERENCIA':
-                                totalesDentro.transferencia += total
-                                break
-                            case 'CREDITO':
-                                totalesDentro.credito += total
-                                break
-                        }
-                    } else {
-                        ventasFuera.push(ventaResumen)
-                        totalesFuera.total += total
-                        totalesFuera.cantidad++
-
-                        switch (venta.metodo_pago) {
-                            case 'EFECTIVO':
-                                totalesFuera.efectivo += total
-                                break
-                            case 'TARJETA':
-                                totalesFuera.tarjeta += total
-                                break
-                            case 'TRANSFERENCIA':
-                                totalesFuera.transferencia += total
-                                break
-                            case 'CREDITO':
-                                totalesFuera.credito += total
-                                break
-                        }
-                    }
+                    ventasPorVendedor.get(v.vendedor_id)!.push({
+                        id: v.id,
+                        numero: v.numero,
+                        fecha: v.fecha,
+                        total: Number(v.total) || 0,
+                        metodo_pago: v.metodo_pago,
+                        turno_id: v.turno_id
+                    })
                 }
 
-                return {
-                    ventas_dentro_turno: ventasDentro,
-                    ventas_fuera_turno: ventasFuera,
-                    totales_dentro: totalesDentro,
-                    totales_fuera: totalesFuera
+                if (vendedorIds.size === 0) {
+                    this.cajeros = []
+                    return
                 }
+
+                // 3. Obtener nombres de usuarios
+                const { data: usuarios, error: usrError } = await supabase
+                    .from('usuarios')
+                    .select('id, nombre')
+                    .in('id', Array.from(vendedorIds))
+
+                if (usrError) throw usrError
+
+                const nombresMap = new Map<string, string>()
+                for (const u of (usuarios || [])) {
+                    nombresMap.set(u.id, u.nombre)
+                }
+
+                // 4. Obtener turnos abiertos del día
+                const { data: turnosAbiertos, error: turnosError } = await supabase
+                    .from('turnos_mesero')
+                    .select('id, usuario_id, hora_inicio')
+                    .eq('estado', 'ABIERTO')
+                    .gte('hora_inicio', inicio)
+                    .lt('hora_inicio', fin)
+
+                if (turnosError) throw turnosError
+
+                const turnoAbiertoMap = new Map<string, string>() // usuario_id → hora_inicio
+                for (const t of (turnosAbiertos || [])) {
+                    turnoAbiertoMap.set(t.usuario_id, t.hora_inicio)
+                }
+
+                // 5. Construir array de cajeros
+                const cajeros: CajeroDia[] = []
+                for (const [vendedorId, ventasVendedor] of ventasPorVendedor) {
+                    const totales = calcularTotalesPorMetodo(ventasVendedor)
+                    cajeros.push({
+                        usuario_id: vendedorId,
+                        nombre: nombresMap.get(vendedorId) || 'Desconocido',
+                        tiene_turno_abierto: turnoAbiertoMap.has(vendedorId),
+                        turno_inicio: turnoAbiertoMap.get(vendedorId) || null,
+                        turno_ids_del_dia: [], // se cargan en fetchDesglose
+                        total_efectivo: totales.efectivo,
+                        total_tarjeta: totales.tarjeta,
+                        total_transferencia: totales.transferencia,
+                        total_credito: totales.credito,
+                        cantidad_ventas: totales.cantidad,
+                        total_recaudado: totales.total
+                    })
+                }
+
+                // Ordenar por nombre
+                cajeros.sort((a, b) => a.nombre.localeCompare(b.nombre))
+                this.cajeros = cajeros
+
             } catch (err: any) {
-                console.error('Error obteniendo desglose de ventas del turno:', err)
-                return {
-                    ventas_dentro_turno: [],
-                    ventas_fuera_turno: [],
-                    totales_dentro: {
-                        efectivo: 0,
-                        tarjeta: 0,
-                        transferencia: 0,
-                        credito: 0,
-                        total: 0,
-                        cantidad: 0
-                    },
-                    totales_fuera: {
-                        efectivo: 0,
-                        tarjeta: 0,
-                        transferencia: 0,
-                        credito: 0,
-                        total: 0,
-                        cantidad: 0
+                console.error('Error en fetchConsolidado:', err)
+                this.error = err.message
+            } finally {
+                this.loading = false
+            }
+        },
+
+        /**
+         * Construye los datos de un cajero específico para un día
+         */
+        async _buildCajeroData(usuarioId: string, nombre: string, fecha: string): Promise<CajeroDia> {
+            const { inicio, fin } = getDiaOperativoRange(fecha)
+
+            // 1. Obtener todas las ventas COMPLETADAS del usuario en el día
+            const { data: ventas, error: ventasError } = await supabase
+                .from('ventas')
+                .select('id, numero, fecha, total, metodo_pago, turno_id')
+                .eq('vendedor_id', usuarioId)
+                .eq('estado', 'COMPLETADA')
+                .gte('fecha', inicio)
+                .lt('fecha', fin)
+                .order('fecha', { ascending: true })
+
+            if (ventasError) throw ventasError
+
+            // 2. Calcular totales
+            const totales = calcularTotalesPorMetodo(
+                (ventas || []).map(v => ({
+                    id: v.id,
+                    numero: v.numero,
+                    fecha: v.fecha,
+                    total: Number(v.total) || 0,
+                    metodo_pago: v.metodo_pago,
+                    turno_id: v.turno_id
+                }))
+            )
+
+            // 3. Verificar turno abierto
+            const { data: turnoAbierto } = await supabase
+                .from('turnos_mesero')
+                .select('id, hora_inicio')
+                .eq('usuario_id', usuarioId)
+                .eq('estado', 'ABIERTO')
+                .maybeSingle()
+
+            return {
+                usuario_id: usuarioId,
+                nombre,
+                tiene_turno_abierto: !!turnoAbierto,
+                turno_inicio: turnoAbierto?.hora_inicio || null,
+                turno_ids_del_dia: [],
+                total_efectivo: totales.efectivo,
+                total_tarjeta: totales.tarjeta,
+                total_transferencia: totales.transferencia,
+                total_credito: totales.credito,
+                cantidad_ventas: totales.cantidad,
+                total_recaudado: totales.total
+            }
+        },
+
+        /**
+         * Carga el desglose de ventas "En Turno" / "Fuera de Turno"
+         * para un cajero específico
+         */
+        async fetchDesglose(usuarioId: string) {
+            const { inicio, fin } = getDiaOperativoRange(this.fechaSeleccionada)
+
+            const cajero = this.cajeros.find(c => c.usuario_id === usuarioId)
+            if (!cajero) return
+
+            try {
+                // 1. Obtener todos los turno_id del usuario en el día
+                const { data: turnos, error: turnosError } = await supabase
+                    .from('turnos_mesero')
+                    .select('id')
+                    .eq('usuario_id', usuarioId)
+                    .gte('hora_inicio', inicio)
+                    .lt('hora_inicio', fin)
+
+                if (turnosError) throw turnosError
+
+                const turnoIds = new Set((turnos || []).map(t => t.id))
+                cajero.turno_ids_del_dia = Array.from(turnoIds)
+
+                // 2. Obtener todas las ventas del usuario en el día
+                const { data: ventas, error: ventasError } = await supabase
+                    .from('ventas')
+                    .select('id, numero, fecha, total, metodo_pago, turno_id')
+                    .eq('vendedor_id', usuarioId)
+                    .eq('estado', 'COMPLETADA')
+                    .gte('fecha', inicio)
+                    .lt('fecha', fin)
+                    .order('fecha', { ascending: true })
+
+                if (ventasError) throw ventasError
+
+                // 3. Clasificar ventas
+                const enTurno: VentaResumen[] = []
+                const fueraTurno: VentaResumen[] = []
+
+                for (const v of (ventas || [])) {
+                    const venta: VentaResumen = {
+                        id: v.id,
+                        numero: v.numero,
+                        fecha: v.fecha,
+                        total: Number(v.total) || 0,
+                        metodo_pago: v.metodo_pago,
+                        turno_id: v.turno_id
+                    }
+
+                    if (v.turno_id && turnoIds.has(v.turno_id)) {
+                        enTurno.push(venta)
+                    } else {
+                        fueraTurno.push(venta)
                     }
                 }
+
+                // 4. Actualizar cajero
+                cajero.ventas_en_turno = enTurno
+                cajero.ventas_fuera_turno = fueraTurno
+                cajero.totales_en_turno = calcularTotalesPorMetodo(enTurno)
+                cajero.totales_fuera_turno = calcularTotalesPorMetodo(fueraTurno)
+
+            } catch (err: any) {
+                console.error('Error en fetchDesglose:', err)
             }
         }
     }
